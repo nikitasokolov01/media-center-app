@@ -1,5 +1,9 @@
 # Rust build output
 /target
+# render PoC build output + result image
+/render-poc/target
+frame.png
+*.png
 
 # Node
 /node_modules

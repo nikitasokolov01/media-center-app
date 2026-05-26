@@ -1,0 +1,29 @@
+# R1 offscreen render-to-PNG proof-of-concept (Approach B, Stage B-Render).
+#
+# SEPARATE binary sub-crate. It does NOT touch the headless addon
+# (../Cargo.toml, ../src/lib.rs, ...) and is not wired into Electron or the app.
+# It loads libmpv-2.dll at runtime (libloading), creates an OFFSCREEN GLES
+# context via ANGLE/EGL (no window), renders one frame through the libmpv render
+# API into an FBO, reads it back, and writes frame.png.
+
+[package]
+name = "libmpv-render-poc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Offscreen libmpv render-API frame-to-PNG PoC (ANGLE EGL pbuffer). Not part of the app."
+
+[[bin]]
+name = "render_poc"
+path = "src/main.rs"
+
+[dependencies]
+# Runtime dynamic loading of libmpv-2.dll (no link-time libmpv).
+libloading = "0.8"
+# Offscreen EGL pbuffer + GLES context via ANGLE (libEGL.dll loaded at runtime).
+khronos-egl = { version = "6", features = ["dynamic"] }
+# Encode the read-back RGBA frame to PNG.
+png = "0.17"
+
+[profile.release]
+opt-level = 2
