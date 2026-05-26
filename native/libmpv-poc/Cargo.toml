@@ -1,0 +1,31 @@
+# Isolated B-Headless libmpv proof-of-concept (Approach B).
+# SEPARATE Cargo project — NOT part of the Electron app build; never imported by
+# electron/** or src/**. Build/run standalone.
+#
+# Linking strategy: we do NOT link libmpv at build time (the Windows dev
+# packages ship only `libmpv.dll.a` (MinGW), not an MSVC `mpv.lib`). Instead we
+# load `libmpv-2.dll` at RUNTIME via `libloading` and call its C ABI directly.
+# So there is no import lib, no headers, and no libmpv2 crate.
+
+[package]
+name = "libmpv-poc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Headless libmpv proof-of-concept (napi-rs, runtime dynamic loading). Not part of the app."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# N-API bindings (ABI-stable: a .node built here loads in both Node and Electron).
+napi = { version = "2", default-features = false, features = ["napi4"] }
+napi-derive = "2"
+# Runtime dynamic loading of libmpv-2.dll (no link-time libmpv).
+libloading = "0.8"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
