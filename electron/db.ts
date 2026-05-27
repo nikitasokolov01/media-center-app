@@ -1015,6 +1015,12 @@ export interface AppSettings {
   preferredSourceQuality: PreferredSourceQuality;
   /** When true, CAM/TS sources are deprioritized (chosen only as a last resort). */
   hideCamSources: boolean;
+  /**
+   * EXPERIMENTAL: enables the embedded libmpv canvas player route. Default off.
+   * Has no effect on the default external-MPV player; purely gates the
+   * /experimental-embedded-player page + sidebar link.
+   */
+  experimentalEmbeddedPlayer: boolean;
 }
 
 const DEFAULTS: AppSettings = {
@@ -1028,6 +1034,7 @@ const DEFAULTS: AppSettings = {
   autoPlayBestSource: false,
   preferredSourceQuality: "best",
   hideCamSources: true,
+  experimentalEmbeddedPlayer: false,
 };
 
 export function getSetting(key: string): string | null {
@@ -1060,6 +1067,7 @@ export function getAppSettings(): AppSettings {
   const autoPlay = getSetting("autoPlayBestSource");
   const prefQ = getSetting("preferredSourceQuality");
   const hideCam = getSetting("hideCamSources");
+  const embedded = getSetting("experimentalEmbeddedPlayer");
   return {
     defaultPlayer: dp === "browser" ? "browser" : DEFAULTS.defaultPlayer,
     mpvPath: mpv && mpv.trim().length > 0 ? mpv : DEFAULTS.mpvPath,
@@ -1083,6 +1091,10 @@ export function getAppSettings(): AppSettings {
       : DEFAULTS.preferredSourceQuality,
     hideCamSources:
       hideCam === null ? DEFAULTS.hideCamSources : hideCam === "true",
+    experimentalEmbeddedPlayer:
+      embedded === null
+        ? DEFAULTS.experimentalEmbeddedPlayer
+        : embedded === "true",
   };
 }
 
@@ -1117,6 +1129,12 @@ export function updateAppSettings(patch: Partial<AppSettings>): AppSettings {
       ? patch.preferredSourceQuality
       : DEFAULTS.preferredSourceQuality;
     setSetting("preferredSourceQuality", v);
+  }
+  if (patch.experimentalEmbeddedPlayer !== undefined) {
+    setSetting(
+      "experimentalEmbeddedPlayer",
+      patch.experimentalEmbeddedPlayer ? "true" : "false",
+    );
   }
   if (patch.hideCamSources !== undefined) {
     setSetting("hideCamSources", patch.hideCamSources ? "true" : "false");

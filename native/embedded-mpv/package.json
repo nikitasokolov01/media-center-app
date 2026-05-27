@@ -1,0 +1,17 @@
+{
+  "name": "embedded-mpv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Experimental embedded libmpv canvas renderer (napi-rs). Built manually; not part of the app's npm scripts.",
+  "napi": {
+    "name": "embedded-mpv"
+  },
+  "scripts": {
+    "build": "napi build --release",
+    "build:debug": "napi build"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  }
+}

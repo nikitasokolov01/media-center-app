@@ -35,6 +35,10 @@ export const IPC = {
   MpvCheckAvailable: "mpv:check-available",
   MpvControl: "mpv:control",
   MpvGetState: "mpv:get-state",
+  // Experimental embedded libmpv canvas player (gated; not the default).
+  EmbeddedStart: "embedded:start",
+  EmbeddedStop: "embedded:stop",
+  EmbeddedGetFrame: "embedded:get-frame",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

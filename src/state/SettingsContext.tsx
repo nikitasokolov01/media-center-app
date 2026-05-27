@@ -36,6 +36,7 @@ const FALLBACK: AppSettings = {
   autoPlayBestSource: false,
   preferredSourceQuality: "best",
   hideCamSources: true,
+  experimentalEmbeddedPlayer: false,
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);

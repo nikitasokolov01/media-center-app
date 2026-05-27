@@ -8,11 +8,12 @@ import PlayerPage from "./pages/PlayerPage.js";
 import SettingsPage from "./pages/SettingsPage.js";
 import LibraryPage from "./pages/LibraryPage.js";
 import ProfilePicker from "./pages/ProfilePicker.js";
+import ExperimentalEmbeddedPlayerPage from "./pages/ExperimentalEmbeddedPlayerPage.js";
 import SearchBox from "./components/SearchBox.js";
 import ProfileAvatar from "./components/ProfileAvatar.js";
 import NowPlayingBar from "./components/NowPlayingBar.js";
 import { ProfileProvider, useProfile } from "./state/ProfileContext.js";
-import { SettingsProvider } from "./state/SettingsContext.js";
+import { SettingsProvider, useSettings } from "./state/SettingsContext.js";
 import { LibraryProvider } from "./state/LibraryContext.js";
 import { ToastProvider } from "./state/ToastContext.js";
 import { ContextMenuProvider } from "./state/ContextMenuContext.js";
@@ -35,6 +36,8 @@ export default function App() {
 
 function AppInner() {
   const { profile, clearActiveProfile } = useProfile();
+  const { settings } = useSettings();
+  const embeddedEnabled = settings.experimentalEmbeddedPlayer;
 
   // No active profile → show the launch picker (Netflix-style).
   if (!profile) {
@@ -62,6 +65,11 @@ function AppInner() {
           <NavLink to="/settings" className="nav-item">
             Settings
           </NavLink>
+          {embeddedEnabled && (
+            <NavLink to="/experimental-embedded-player" className="nav-item">
+              Embedded (exp)
+            </NavLink>
+          )}
         </nav>
 
         <div className="sidebar__spacer" />
@@ -92,6 +100,12 @@ function AppInner() {
           <Route path="/media/:type/:id" element={<MediaPage />} />
           <Route path="/watch/:type/:id" element={<PlayerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          {embeddedEnabled && (
+            <Route
+              path="/experimental-embedded-player"
+              element={<ExperimentalEmbeddedPlayerPage />}
+            />
+          )}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

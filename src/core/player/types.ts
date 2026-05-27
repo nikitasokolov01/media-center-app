@@ -13,6 +13,38 @@ export type PlayerBackend =
   | "mpv-embedded-future"; // future: libmpv / mpv render API / native addon
 
 /**
+ * Backends a PlayRequest can target. This is the *dispatch* boundary used by
+ * source selection — distinct from the descriptive `PlayerBackend` registry
+ * above. External MPV is the default/fallback; embedded is experimental.
+ */
+export type PlayerBackendId = "external-mpv" | "embedded-mpv-experimental";
+
+/** Where a PlayRequest originated (dev logging / debugging only). */
+export type PlayRequestSource = "manual" | "autoplay" | "experimental-page";
+
+/**
+ * The single, explicit unit of "play exactly this". Built once from the clicked
+ * (or auto-selected) source and handed to the chosen backend. `streamUrl` is
+ * the authoritative URL — the clicked source URL, the PlayRequest URL, and the
+ * URL the backend receives are all the same value. Nothing mutates a shared
+ * global "current URL"; each request is self-contained and backend-tagged.
+ */
+export interface PlayRequest {
+  backend: PlayerBackendId;
+  type: "movie" | "series";
+  mediaId: string;
+  playableId: string;
+  mediaTitle: string;
+  episodeTitle?: string;
+  season?: number;
+  episode?: number;
+  streamUrl: string;
+  streamTitle?: string;
+  streamName?: string;
+  poster?: string;
+}
+
+/**
  * Lean payload sent across the IPC boundary to launch a stream. We
  * deliberately do NOT send the full StremioStream object — only what an
  * external player needs plus titles for the window/progress bookkeeping.
@@ -161,6 +193,11 @@ export interface AppSettings {
   preferredSourceQuality: PreferredSourceQuality;
   /** When true, CAM/TS sources are deprioritized (last resort only). */
   hideCamSources: boolean;
+  /**
+   * EXPERIMENTAL: gates the embedded libmpv canvas player route. Default off.
+   * No effect on the default external-MPV player.
+   */
+  experimentalEmbeddedPlayer: boolean;
 }
 
 /** Per-stream-format capability hints used by the action picker. */

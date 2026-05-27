@@ -136,6 +136,7 @@ const api = {
       autoPlayBestSource?: boolean;
       preferredSourceQuality?: "best" | "2160p" | "1080p" | "720p" | "first";
       hideCamSources?: boolean;
+      experimentalEmbeddedPlayer?: boolean;
     }) => ipcRenderer.invoke(IPC.SettingsUpdate, patch),
   },
 };
@@ -176,8 +177,19 @@ const electronAPI = {
   mpvGetState: () => ipcRenderer.invoke(IPC.MpvGetState),
 };
 
+// EXPERIMENTAL embedded libmpv canvas player bridge (gated; not the default).
+// Separate namespace so it's clearly opt-in and isolated from the normal API.
+const embeddedMpv = {
+  start: (url: string) => ipcRenderer.invoke(IPC.EmbeddedStart, { url }),
+  stop: () => ipcRenderer.invoke(IPC.EmbeddedStop),
+  getFrame: (sinceIndex: number) =>
+    ipcRenderer.invoke(IPC.EmbeddedGetFrame, { sinceIndex }),
+};
+
 contextBridge.exposeInMainWorld("mediaCenter", api);
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
+contextBridge.exposeInMainWorld("embeddedMpv", embeddedMpv);
 
 export type MediaCenterApi = typeof api;
 export type ElectronApi = typeof electronAPI;
+export type EmbeddedMpvApi = typeof embeddedMpv;

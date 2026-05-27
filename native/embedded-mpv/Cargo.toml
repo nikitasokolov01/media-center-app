@@ -1,0 +1,34 @@
+# EXPERIMENTAL embedded libmpv addon for the Media Center app (Stage E1).
+#
+# A napi-rs N-API addon loaded by the Electron MAIN process. It runs a libmpv
+# render loop on a BACKGROUND THREAD (offscreen ANGLE EGL pbuffer + GLES),
+# stores the latest RGBA frame, and exposes start/stop/getLatestFrame to JS.
+#
+# Built MANUALLY and separately from the app (`npm install` + `npm run build`
+# here). Not wired into the app's npm scripts. The app loads the built .node by
+# path and degrades gracefully if it's missing. Reuses the same libmpv + ANGLE
+# DLLs as native/libmpv-poc (placed in this crate's vendor/ folder).
+
+[package]
+name = "embedded-mpv"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Experimental embedded libmpv canvas renderer (napi-rs). Not the default player."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi4"] }
+napi-derive = "2"
+# Runtime dynamic loading of libmpv-2.dll (no link-time libmpv).
+libloading = "0.8"
+# Offscreen EGL pbuffer + GLES context via ANGLE (libEGL.dll at runtime).
+khronos-egl = { version = "6", features = ["dynamic"] }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+opt-level = 2

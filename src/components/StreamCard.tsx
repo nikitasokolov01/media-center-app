@@ -20,7 +20,10 @@ import {
   canBrowserPlay,
   recommendedBackend,
 } from "../core/player/browserPlayer.js";
-import { playSourceWithMpv } from "../features/player/playSource.js";
+import {
+  buildPlayRequest,
+  dispatchPlayRequest,
+} from "../features/player/playRequest.js";
 import { resolveAudioLanguage } from "../core/player/audioPreference.js";
 import { useSettings } from "../state/SettingsContext.js";
 import { useProfile } from "../state/ProfileContext.js";
@@ -237,24 +240,33 @@ export default function StreamCard({
     }
     setLaunching("mpv");
 
-    // Subtitle auto-load + payload build + launch all happen in the shared
-    // routine so this matches the "Play Best Source" path exactly. The audio
-    // language is resolved here (anime vs. global) from current settings.
+    // Build an explicit PlayRequest from THIS clicked source, then dispatch to
+    // the external-MPV backend. The URL comes straight from the clicked stream
+    // (s.url) so what's clicked is exactly what plays.
     try {
-      const res = await playSourceWithMpv({
-        result,
-        type,
-        mediaId,
-        playableId,
-        mediaTitle,
-        mediaPoster,
-        episodeTitle,
-        season,
-        episode,
-        startSeconds,
+      const req = buildPlayRequest(
+        {
+          backend: "external-mpv",
+          type,
+          mediaId,
+          playableId,
+          mediaTitle,
+          episodeTitle,
+          season,
+          episode,
+          streamUrl: s.url,
+          streamTitle: s.title,
+          streamName: s.name,
+          poster: mediaPoster,
+        },
+        "manual",
+      );
+      const res = await dispatchPlayRequest(req, {
         subtitleAddons,
         profileId: profile?.id,
+        startSeconds,
         audioLanguageOverride: resolveAudioLanguage(settings, isAnime ?? false),
+        origin: "manual",
       });
       if (res.ok) {
         // Let the parent mark this as the active/current source.

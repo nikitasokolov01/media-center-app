@@ -11,7 +11,10 @@ import { addonSupportsResource } from "../core/stremio/meta.js";
 import { streamDedupKey } from "../core/stremio/streams.js";
 import { chooseBestSource, detectResolution } from "../core/player/sourceRanking.js";
 import { resolveAudioLanguage } from "../core/player/audioPreference.js";
-import { playSourceWithMpv } from "../features/player/playSource.js";
+import {
+  buildPlayRequest,
+  dispatchPlayRequest,
+} from "../features/player/playRequest.js";
 import { useSettings } from "../state/SettingsContext.js";
 import { useProfile } from "../state/ProfileContext.js";
 import type {
@@ -19,6 +22,7 @@ import type {
   StreamSourceResult,
   StremioStream,
 } from "../core/stremio/types.js";
+import type { PlayRequestSource } from "../core/player/types.js";
 import type { AddonRow } from "../types/preload.js";
 
 interface Props {
@@ -138,25 +142,36 @@ export default function SourcesSection({
     return chooseBestSource(results, settings);
   }, [settings, loading, results]);
 
-  const handlePlayBest = useCallback(async () => {
+  const handlePlayBest = useCallback(
+    async (origin: PlayRequestSource = "manual") => {
     if (!bestResult || !selected || playingBest) return;
     setBestError(null);
     setPlayingBest(true);
     try {
-      const res = await playSourceWithMpv({
-        result: bestResult,
-        type: selected.type,
-        mediaId,
-        playableId: selected.id,
-        mediaTitle,
-        mediaPoster,
-        episodeTitle,
-        season: selected.type === "series" ? selected.season : undefined,
-        episode: selected.type === "series" ? selected.episode : undefined,
-        startSeconds,
+      // Build an explicit PlayRequest from the auto-selected best source.
+      const req = buildPlayRequest(
+        {
+          backend: "external-mpv",
+          type: selected.type,
+          mediaId,
+          playableId: selected.id,
+          mediaTitle,
+          episodeTitle,
+          season: selected.type === "series" ? selected.season : undefined,
+          episode: selected.type === "series" ? selected.episode : undefined,
+          streamUrl: bestResult.stream.url ?? "",
+          streamTitle: bestResult.stream.title,
+          streamName: bestResult.stream.name,
+          poster: mediaPoster,
+        },
+        origin,
+      );
+      const res = await dispatchPlayRequest(req, {
         subtitleAddons: addons,
         profileId: profile?.id,
+        startSeconds,
         audioLanguageOverride: resolveAudioLanguage(settings, isAnime ?? false),
+        origin,
       });
       if (!res.ok) {
         setBestError(
@@ -208,7 +223,7 @@ export default function SourcesSection({
     if (autoPlayedSelRef.current === selected) return;
     autoPlayedSelRef.current = selected;
     setCurrentSourceKey(bestResult.key);
-    void handlePlayBest();
+    void handlePlayBest("autoplay");
   }, [
     settings.autoPlayBestSource,
     loading,
@@ -521,7 +536,7 @@ export default function SourcesSection({
           <button
             type="button"
             className="primary-button sources__play-best"
-            onClick={handlePlayBest}
+            onClick={() => void handlePlayBest("manual")}
             disabled={playingBest}
             title="Play the auto-selected best source with MPV"
           >

@@ -431,6 +431,34 @@ export default function SettingsPage() {
           </span>
         </label>
       </section>
+
+      <section className="settings-section">
+        <h2>Experimental</h2>
+        <p className="muted small">
+          Work-in-progress features. These do not affect normal playback — the
+          external MPV player remains the default.
+        </p>
+
+        <label className="checkbox-row" style={{ marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={settings.experimentalEmbeddedPlayer}
+            onChange={(e) =>
+              void saveSetting({ experimentalEmbeddedPlayer: e.target.checked })
+            }
+          />
+          <span>
+            Embedded player (experimental)
+            <span className="muted small">
+              {" "}
+              — adds an{" "}
+              <strong>Embedded (experimental)</strong> page that renders libmpv
+              video into an in-app canvas. Copy-based and unoptimized; requires
+              the native addon to be built. Does not replace external MPV.
+            </span>
+          </span>
+        </label>
+      </section>
     </div>
   );
 }

@@ -43,6 +43,12 @@ import {
   type MpvPayload,
   type MpvControlAction,
 } from "./mpv.js";
+import {
+  embeddedStart,
+  embeddedStop,
+  embeddedGetFrame,
+  embeddedShutdown,
+} from "./embeddedMpvExperimental.js";
 import type { AppSettings } from "./db.js";
 import {
   resolveAddonFromUrl,
@@ -320,6 +326,18 @@ function registerIpcHandlers() {
   );
   ipcMain.handle(IPC.MpvGetState, async () => mpvGetState());
 
+  // Experimental embedded libmpv canvas player (gated; never the default).
+  // All handlers degrade gracefully when the native addon is missing/fails.
+  ipcMain.handle(IPC.EmbeddedStart, async (_e, args: { url: string }) =>
+    embeddedStart(args?.url),
+  );
+  ipcMain.handle(IPC.EmbeddedStop, async () => embeddedStop());
+  ipcMain.handle(
+    IPC.EmbeddedGetFrame,
+    async (_e, args: { sinceIndex: number }) =>
+      embeddedGetFrame(args?.sinceIndex ?? 0),
+  );
+
   // Dev-only: insert a synthetic addon whose endpoints will fail to fetch,
   // to verify graceful per-row/per-page failure handling end-to-end. Gated to
   // development builds in main.ts (we only register it when NODE_ENV is dev).
@@ -369,4 +387,9 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// Best-effort stop of the experimental embedded session on shutdown.
+app.on("will-quit", () => {
+  embeddedShutdown();
 });
