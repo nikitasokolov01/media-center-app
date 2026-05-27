@@ -3,6 +3,8 @@
 Project memory for future Claude sessions. Keep this accurate; if a detail is
 uncertain, the note says "verify in code." Do not invent features.
 
+Current session handoff notes, if present, live in docs/current-session-handoff.md and should be read before making changes.
+
 ## 1. Project Overview
 
 Electron + React + TypeScript desktop media center, compatible with
