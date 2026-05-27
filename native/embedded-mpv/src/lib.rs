@@ -517,6 +517,21 @@ unsafe fn render_main_inner(
                     local.as_mut_ptr() as *mut c_void,
                 );
 
+                // glReadPixels returns rows in bottom-up order (OpenGL
+                // bottom-left origin). canvas ImageData expects top-left
+                // origin. Flip rows in-place so the canvas renders upright.
+                {
+                    let stride = (W * 4) as usize;
+                    let height = H as usize;
+                    for row in 0..(height / 2) {
+                        let top = row * stride;
+                        let bot = (height - 1 - row) * stride;
+                        // split_at_mut requires bot > top, which holds here.
+                        let (lo, hi) = local.split_at_mut(bot);
+                        lo[top..top + stride].swap_with_slice(&mut hi[..stride]);
+                    }
+                }
+
                 index += 1;
                 let mut f = lock(&shared.frame);
                 f.width = W;
