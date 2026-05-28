@@ -191,10 +191,13 @@ addons return and plays direct HTTP/HTTPS URLs through MPV.
 
 ## 9. Future Roadmap
 
-- Subtitle support (external MPV)
+- Subtitle auto-loading for embedded player (addons + OpenSubtitles; external MPV already has this)
+- watch_progress writes for embedded playback (currently no progress saved)
+- Dynamic embedded render resolution (currently fixed 1280×720 in `lib.rs`)
+- Fade-on-inactivity for the embedded control bar
 - Source filtering/sorting (only if needed later)
 - Addon management polish
-- Better MPV IPC controls (pause/seek from the app — "Custom MPV arguments"
+- Better external MPV IPC controls (pause/seek from the app — "Custom MPV arguments"
   setting is already TODO'd in `electron/mpv.ts`)
 - Packaging/bundling MPV with the app
 - Settings polish
