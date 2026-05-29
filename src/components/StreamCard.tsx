@@ -1,9 +1,16 @@
 // One stream rendered as a card. Click toggles a details panel with raw
-// fields. The right-side action area shows a primary action (Play with MPV,
-// or Play in App if the user prefers browser + the format is browser-safe)
-// plus a secondary action when both backends are viable. .mkv / unknown
-// containers only offer MPV — the browser path is hidden because we know it
-// will fail.
+// fields.
+//
+// Button layout depends on settings:
+//
+// experimentalEmbeddedPlayer OFF (default):
+//   Primary:   ▶ Play with MPV  (or ▶ Play in App if browser is recommended)
+//   Secondary: Play in App / Play with MPV  (when both are viable)
+//
+// experimentalEmbeddedPlayer ON:
+//   Primary:   ▶ Play           (launches embedded overlay)
+//   Secondary: Open in MPV      (external MPV fallback, always visible when viable)
+//   The old "⬡ Play Embedded" button is gone — embedded IS the primary.
 
 import { useEffect, useState, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -369,7 +376,7 @@ export default function StreamCard({
   // ---- Build the action buttons -------------------------------------------
 
   function renderActions(): React.ReactNode {
-    // Non-direct streams: existing single-action behavior.
+    // Non-direct streams: single-action behavior (unchanged).
     switch (playability.kind) {
       case "external":
         return (
@@ -407,7 +414,7 @@ export default function StreamCard({
           </button>
         );
       case "playable":
-      case "hls":
+      case "hls": {
         if (!mpvViable && !browserViable) {
           return (
             <button
@@ -421,7 +428,40 @@ export default function StreamCard({
             </button>
           );
         }
-        // Direct URL — render primary + (optional) secondary.
+
+        // ── Embedded-first mode (experimentalEmbeddedPlayer ON) ──────────────
+        // Primary = embedded overlay. External MPV is a secondary fallback.
+        // Browser "Play in App" is not shown in this mode to keep UI clean.
+        if (settings.experimentalEmbeddedPlayer) {
+          return (
+            <>
+              <button
+                type="button"
+                className="stream-card__action stream-card__action--primary"
+                onClick={handlePlayEmbedded}
+                disabled={launching !== null}
+                title="Play in the embedded player"
+              >
+                {launching === "embedded" ? "Starting…" : "▶ Play"}
+              </button>
+              {mpvViable && (
+                <button
+                  type="button"
+                  className="stream-card__action"
+                  onClick={handlePlayInMpv}
+                  disabled={launching !== null}
+                  title={`Open in external MPV (${playability.format?.toUpperCase() ?? "stream"})`}
+                >
+                  {launching === "mpv" ? "Launching MPV…" : "Open in MPV"}
+                </button>
+              )}
+            </>
+          );
+        }
+
+        // ── Default mode (experimentalEmbeddedPlayer OFF) ────────────────────
+        // Existing behavior: MPV primary, browser secondary when viable.
+        // Recommended backend can promote browser to primary.
         const mpvBtn = (
           <button
             type="button"
@@ -444,70 +484,37 @@ export default function StreamCard({
             Play in App
           </button>
         );
-        // Decide order: recommended backend first, plus the other when viable.
         if (recommended === "browser") {
-          // User prefers browser AND format is browser-safe — promote it.
-          const promoted = (
-            <button
-              type="button"
-              className="stream-card__action stream-card__action--primary"
-              onClick={handlePlayInApp}
-              disabled={launching !== null}
-              title="Play in the built-in browser player"
-            >
-              ▶ Play in App
-            </button>
-          );
-          const demoted = (
-            <button
-              type="button"
-              className="stream-card__action"
-              onClick={handlePlayInMpv}
-              disabled={launching !== null}
-              title={`Open MPV (${playability.format?.toUpperCase() ?? "stream"})`}
-            >
-              {launching === "mpv" ? "Launching MPV…" : "Play with MPV"}
-            </button>
-          );
-          const embeddedBtnBrowser = settings.experimentalEmbeddedPlayer ? (
-            <button
-              type="button"
-              className="stream-card__action stream-card__action--embedded"
-              onClick={handlePlayEmbedded}
-              disabled={launching !== null}
-              title="Play in the experimental embedded canvas player"
-            >
-              {launching === "embedded" ? "Starting…" : "⬡ Play Embedded"}
-            </button>
-          ) : null;
           return (
             <>
-              {promoted}
-              {demoted}
-              {embeddedBtnBrowser}
+              <button
+                type="button"
+                className="stream-card__action stream-card__action--primary"
+                onClick={handlePlayInApp}
+                disabled={launching !== null}
+                title="Play in the built-in browser player"
+              >
+                ▶ Play in App
+              </button>
+              <button
+                type="button"
+                className="stream-card__action"
+                onClick={handlePlayInMpv}
+                disabled={launching !== null}
+                title={`Open MPV (${playability.format?.toUpperCase() ?? "stream"})`}
+              >
+                {launching === "mpv" ? "Launching MPV…" : "Play with MPV"}
+              </button>
             </>
           );
         }
-        // Default: MPV primary, browser secondary only when format is safe.
-        // Embedded experimental button appended when the flag is on.
-        const embeddedBtn = settings.experimentalEmbeddedPlayer ? (
-          <button
-            type="button"
-            className="stream-card__action stream-card__action--embedded"
-            onClick={handlePlayEmbedded}
-            disabled={launching !== null}
-            title="Play in the experimental embedded canvas player"
-          >
-            {launching === "embedded" ? "Starting…" : "⬡ Play Embedded"}
-          </button>
-        ) : null;
         return (
           <>
             {mpvBtn}
             {browserViable && browserBtn}
-            {embeddedBtn}
           </>
         );
+      }
       default:
         return (
           <button

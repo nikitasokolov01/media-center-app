@@ -148,10 +148,15 @@ export default function SourcesSection({
     setBestError(null);
     setPlayingBest(true);
     try {
-      // Build an explicit PlayRequest from the auto-selected best source.
+      // When experimentalEmbeddedPlayer is ON, auto-play uses the embedded
+      // overlay as the primary backend. External MPV is used otherwise.
+      const backend = settings.experimentalEmbeddedPlayer
+        ? "embedded-mpv-experimental"
+        : "external-mpv";
+
       const req = buildPlayRequest(
         {
-          backend: "external-mpv",
+          backend,
           type: selected.type,
           mediaId,
           playableId: selected.id,
@@ -167,16 +172,23 @@ export default function SourcesSection({
         origin,
       );
       const res = await dispatchPlayRequest(req, {
-        subtitleAddons: addons,
-        profileId: profile?.id,
-        startSeconds,
-        audioLanguageOverride: resolveAudioLanguage(settings, isAnime ?? false),
+        // Only pass MPV-specific options when using external MPV.
+        ...(backend === "external-mpv"
+          ? {
+              subtitleAddons: addons,
+              profileId: profile?.id,
+              startSeconds,
+              audioLanguageOverride: resolveAudioLanguage(settings, isAnime ?? false),
+            }
+          : {}),
         origin,
       });
       if (!res.ok) {
         setBestError(
           res.error ??
-            "MPV was not found. Install MPV or set the MPV path in Settings.",
+            (backend === "external-mpv"
+              ? "MPV was not found. Install MPV or set the MPV path in Settings."
+              : "Failed to start the embedded player."),
         );
       }
     } finally {
@@ -538,7 +550,11 @@ export default function SourcesSection({
             className="primary-button sources__play-best"
             onClick={() => void handlePlayBest("manual")}
             disabled={playingBest}
-            title="Play the auto-selected best source with MPV"
+            title={
+              settings.experimentalEmbeddedPlayer
+                ? "Play the auto-selected best source in the embedded player"
+                : "Play the auto-selected best source with MPV"
+            }
           >
             {playingBest ? "Launching…" : "▶ Play Best Source"}
           </button>

@@ -294,6 +294,26 @@ Do **not** merge to main or remove external MPV unless explicitly decided.
   `:fullscreen` / `:-webkit-full-screen` selectors that didn't work in Electron.
 - **Esc behavior**: first Esc exits fullscreen; second Esc closes overlay.
 
+### E7 Embedded as default player (when flag is ON)
+
+When `experimentalEmbeddedPlayer` is ON, the embedded overlay becomes the **primary
+playback path** for direct HTTP/HTTPS sources. External MPV is demoted to a secondary
+fallback button.
+
+**StreamCard button layout**:
+- Flag OFF (default): unchanged — "▶ Play with MPV" primary, "Play in App" secondary.
+- Flag ON: "▶ Play" primary → `handlePlayEmbedded`; "Open in MPV" secondary fallback.
+  The old "⬡ Play Embedded" tertiary button is removed (embedded IS the primary).
+
+**Auto-play best source** (`SourcesSection.handlePlayBest`):
+- Flag ON: `backend: "embedded-mpv-experimental"` — opens embedded overlay.
+- Flag OFF: `backend: "external-mpv"` — existing MPV behavior.
+- MPV-specific dispatch options (`subtitleAddons`, `startSeconds`, audio language)
+  are only passed through when using external MPV.
+
+**No other changes**: source ranking, profiles, library, progress tracking, Continue
+Watching, and external MPV IPC are all untouched.
+
 ### Known limitations / TODO
 - No subtitle auto-loading from addons/OpenSubtitles (only mpv's loaded tracks).
 - No pause/seek keyboard IPC for the standalone test page (only overlay has it).
