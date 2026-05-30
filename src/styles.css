@@ -2389,18 +2389,42 @@ a:hover { text-decoration: underline; }
   margin-top: 8px;
 }
 
-/* ─── Embedded player overlay (E4/E5/E6) ─────────────────────────────────
+/* ─── Embedded player overlay ────────────────────────────────────────────────
  *
- * Layout (E6 — YouTube/Netflix style):
- *   • .emb-overlay     — position:fixed inset:0, always covers the full window
- *   • .emb-overlay__stage — position:absolute inset:0, fills everything
- *   • canvas           — 100%×100% object-fit:contain, aspect-ratio preserved
- *   • header/controls/stats — all position:absolute; float OVER the canvas;
- *     they never shrink the canvas area (no layout space taken)
- *   • .controls-hidden — fades chrome and hides cursor (auto-hide after 2.5s)
- *   • .is-fullscreen   — React class mirroring BrowserWindow fullscreen state
+ * Responsive scaling via CSS custom properties + clamp().
  *
- * ─────────────────────────────────────────────────────────────────────── */
+ * The --emb-* variables are set on .emb-overlay so they scale relative to
+ * the overlay viewport width (100vw when fullscreen, smaller when windowed).
+ * clamp(min, preferred, max) keeps every control readable on both a 720p
+ * window and a 4K/1440p monitor without media-query breakpoints.
+ *
+ * Visual density classes (future):
+ *   .emb-overlay--compact  → smaller controls
+ *   .emb-overlay--large    → bigger controls
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── CSS variable definitions (set on root of the overlay) ── */
+.emb-overlay {
+  /* font sizes */
+  --emb-ctrl-font:   clamp(13px, 1.1vw, 16px);   /* standard button text    */
+  --emb-icon-font:   clamp(16px, 1.4vw, 20px);   /* icon buttons            */
+  --emb-play-font:   clamp(20px, 1.8vw, 28px);   /* big play/pause button   */
+  --emb-time-font:   clamp(11px, 0.9vw, 14px);   /* timestamp labels        */
+  --emb-track-font:  clamp(11px, 0.9vw, 13px);   /* subtitle/audio selects  */
+  --emb-toast-font:  clamp(13px, 1.1vw, 16px);   /* volume toast            */
+  /* padding */
+  --emb-ctrl-pad-v:  clamp(3px,  0.3vw, 6px);    /* button vertical pad     */
+  --emb-ctrl-pad-h:  clamp(7px,  0.6vw, 12px);   /* button horizontal pad   */
+  --emb-bar-pad-h:   clamp(10px, 1.0vw, 20px);   /* control-bar side pad    */
+  --emb-bar-pad-top: clamp(32px, 3.0vw, 56px);   /* gradient fade height    */
+  --emb-bar-gap:     clamp(4px,  0.4vw, 8px);    /* gap between controls    */
+  /* progress / volume bars */
+  --emb-progress-h:  clamp(4px,  0.35vw, 6px);   /* scrub bar default h     */
+  --emb-progress-h-hover: clamp(6px, 0.5vw, 9px);
+  --emb-volume-w:    clamp(64px, 5.5vw, 100px);
+  /* source panel */
+  --emb-panel-w:     clamp(280px, 26vw, 380px);
+}
 
 .emb-overlay {
   position: fixed;
@@ -2417,6 +2441,7 @@ a:hover { text-decoration: underline; }
   inset: 0;
   background: #000;
   overflow: hidden;
+  /* Cursor default while controls hidden is set on .emb-overlay.controls-hidden */
 }
 
 /* ── Canvas fills stage; object-fit:contain preserves aspect ratio ── */
@@ -2438,13 +2463,13 @@ a:hover { text-decoration: underline; }
   justify-content: center;
   gap: 12px;
   color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
+  font-size: var(--emb-ctrl-font);
   pointer-events: none;
   z-index: 2;
 }
 .emb-overlay__spinner {
-  width: 32px;
-  height: 32px;
+  width: clamp(28px, 2.5vw, 40px);
+  height: clamp(28px, 2.5vw, 40px);
   border: 3px solid rgba(255,255,255,0.15);
   border-top-color: rgba(255,255,255,0.7);
   border-radius: 50%;
@@ -2452,6 +2477,30 @@ a:hover { text-decoration: underline; }
 }
 @keyframes emb-spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── Volume toast (centre-top area) ── */
+.emb-overlay__volume-toast {
+  position: absolute;
+  top: clamp(52px, 5vw, 80px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  color: #fff;
+  font-size: var(--emb-toast-font);
+  font-weight: 600;
+  padding: 6px 18px;
+  pointer-events: none;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  animation: emb-toast-in 0.12s ease;
+}
+@keyframes emb-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ── Header — floats at top, gradient from top, fades with controls ── */
@@ -2462,7 +2511,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px 40px;
+  padding: clamp(8px,0.7vw,14px) var(--emb-bar-pad-h) clamp(36px,3.5vw,56px);
   background: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.85) 0%,
@@ -2470,12 +2519,6 @@ a:hover { text-decoration: underline; }
   );
   transition: opacity 300ms ease;
   pointer-events: auto;
-}
-.emb-overlay__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
 }
 .emb-overlay__title-area {
   display: flex;
@@ -2485,7 +2528,7 @@ a:hover { text-decoration: underline; }
   min-width: 0;
 }
 .emb-overlay__title {
-  font-size: 13px;
+  font-size: var(--emb-ctrl-font);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -2494,17 +2537,23 @@ a:hover { text-decoration: underline; }
 }
 .emb-overlay__status {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--emb-time-font);
   color: rgba(255, 255, 255, 0.5);
+}
+.emb-overlay__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .emb-overlay__close {
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius);
   color: rgba(255, 255, 255, 0.7);
-  font-size: 13px;
+  font-size: var(--emb-ctrl-font);
   cursor: pointer;
-  padding: 3px 9px;
+  padding: var(--emb-ctrl-pad-v) var(--emb-ctrl-pad-h);
   line-height: 1.4;
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
@@ -2517,10 +2566,10 @@ a:hover { text-decoration: underline; }
 /* ── Error banners — always visible regardless of auto-hide state ── */
 .emb-overlay__errors {
   position: absolute;
-  top: 48px; left: 0; right: 0;
-  z-index: 15;          /* above header gradient */
-  padding: 0 12px;
-  pointer-events: none; /* don't block canvas clicks */
+  top: clamp(44px,4vw,64px); left: 0; right: 0;
+  z-index: 15;
+  padding: 0 var(--emb-bar-pad-h);
+  pointer-events: none;
 }
 .emb-overlay__banner {
   margin: 0 0 6px;
@@ -2530,8 +2579,8 @@ a:hover { text-decoration: underline; }
 /* ── Stats HUD — tiny corner overlay, fades with controls ── */
 .emb-overlay__stats {
   position: absolute;
-  bottom: 64px;   /* sits above the controls gradient */
-  left: 12px;
+  bottom: clamp(58px,6vw,80px);
+  left: var(--emb-bar-pad-h);
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
@@ -2549,8 +2598,8 @@ a:hover { text-decoration: underline; }
   z-index: 11;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 40px 12px 10px;
+  gap: clamp(2px, 0.3vw, 5px);
+  padding: var(--emb-bar-pad-top) var(--emb-bar-pad-h) clamp(8px,0.8vw,14px);
   background: linear-gradient(
     to top,
     rgba(0, 0, 0, 0.88) 0%,
@@ -2562,20 +2611,20 @@ a:hover { text-decoration: underline; }
 .emb-overlay__progress-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--emb-bar-gap);
 }
 /* Transport row: play, volume, spacer, tracks, source, fullscreen, stop */
 .emb-overlay__transport {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: clamp(2px, 0.3vw, 6px);
 }
 .emb-overlay__transport-spacer { flex: 1; }
 /* Large play/pause button */
 .emb-overlay__ctrl--play {
-  font-size: 20px;
-  padding: 2px 8px;
-  min-width: 36px;
+  font-size: var(--emb-play-font);
+  padding: 2px var(--emb-ctrl-pad-h);
+  min-width: clamp(32px, 3vw, 48px);
 }
 /* Ghost / active state for toggle buttons (stats, source) */
 .emb-overlay__ctrl--ghost {
@@ -2594,17 +2643,15 @@ a:hover { text-decoration: underline; }
   opacity: 0;
   pointer-events: none;
 }
-/* Hide the mouse cursor when controls are hidden */
 .emb-overlay.controls-hidden {
   cursor: none;
 }
 
 /* ── E8: Next Episode prompt ── */
-/* Appears bottom-right, above the controls bar, fades with controls-hidden. */
 .emb-overlay__next-ep {
   position: absolute;
-  bottom: 72px;    /* sits above the controls gradient */
-  right: 16px;
+  bottom: clamp(62px, 7vw, 90px);
+  right: var(--emb-bar-pad-h);
   z-index: 12;
   transition: opacity 300ms ease;
 }
@@ -2620,14 +2667,14 @@ a:hover { text-decoration: underline; }
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 6px;
   color: #fff;
-  font-size: 13px;
+  font-size: var(--emb-ctrl-font);
   font-weight: 600;
-  padding: 8px 16px;
+  padding: clamp(6px,0.5vw,10px) clamp(12px,1.2vw,20px);
   cursor: pointer;
   backdrop-filter: blur(8px);
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
   white-space: nowrap;
-  max-width: 320px;
+  max-width: clamp(240px,28vw,380px);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -2642,9 +2689,7 @@ a:hover { text-decoration: underline; }
   transform: none;
 }
 
-/* ── .is-fullscreen (React class based on BrowserWindow state) ── */
-/* The overlay already covers the full window (fixed inset:0).
-   This class is a styling marker; the background ensures no flash. */
+/* ── .is-fullscreen ── */
 .emb-overlay.is-fullscreen {
   background: #000;
 }
@@ -2655,8 +2700,8 @@ a:hover { text-decoration: underline; }
   border: none;
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
-  font-size: 13px;
-  padding: 4px 8px;
+  font-size: var(--emb-ctrl-font);
+  padding: var(--emb-ctrl-pad-v) var(--emb-ctrl-pad-h);
   border-radius: var(--radius);
   flex-shrink: 0;
   transition: color 0.15s, background 0.15s;
@@ -2673,14 +2718,14 @@ a:hover { text-decoration: underline; }
   pointer-events: none;
 }
 .emb-overlay__ctrl--icon {
-  font-size: 16px;
-  padding: 2px 6px;
+  font-size: var(--emb-icon-font);
+  padding: 2px clamp(5px,0.45vw,8px);
 }
 .emb-overlay__ctrl--stop {
   border: 1px solid rgba(255, 80, 80, 0.6);
   color: rgba(255, 120, 120, 0.9);
-  padding: 4px 10px;
-  margin-left: 4px;
+  padding: var(--emb-ctrl-pad-v) var(--emb-ctrl-pad-h);
+  margin-left: clamp(2px,0.3vw,6px);
 }
 .emb-overlay__ctrl--stop:hover {
   background: rgba(255, 80, 80, 0.15);
@@ -2690,12 +2735,12 @@ a:hover { text-decoration: underline; }
 
 /* ── Time labels ── */
 .emb-overlay__time {
-  font-size: 12px;
+  font-size: var(--emb-time-font);
   color: rgba(255, 255, 255, 0.8);
   white-space: nowrap;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  min-width: 36px;
+  min-width: clamp(34px, 3vw, 48px);
 }
 .emb-overlay__time--dur {
   color: rgba(255, 255, 255, 0.45);
@@ -2705,18 +2750,19 @@ a:hover { text-decoration: underline; }
 .emb-overlay__progress {
   flex: 1;
   min-width: 60px;
-  height: 4px;
+  height: var(--emb-progress-h);
   accent-color: var(--accent, #6aa3ff);
   cursor: pointer;
+  transition: height 0.1s;
 }
 .emb-overlay__progress:hover {
-  height: 6px;
+  height: var(--emb-progress-h-hover);
 }
 
 /* ── Volume slider ── */
 .emb-overlay__volume {
-  width: 72px;
-  height: 4px;
+  width: var(--emb-volume-w);
+  height: var(--emb-progress-h);
   accent-color: var(--accent, #6aa3ff);
   cursor: pointer;
   flex-shrink: 0;
@@ -2728,24 +2774,23 @@ a:hover { text-decoration: underline; }
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius);
   color: rgba(255, 255, 255, 0.8);
-  font-size: 12px;
-  padding: 3px 6px;
+  font-size: var(--emb-track-font);
+  padding: clamp(2px,0.2vw,4px) clamp(5px,0.45vw,8px);
   cursor: pointer;
   flex-shrink: 0;
-  max-width: 120px;
+  max-width: clamp(100px, 10vw, 140px);
 }
 .emb-overlay__track-select:hover {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
-
-/* ── In-player source picker panel (Part 5) ── */
+/* ── In-player source picker panel ── */
 .emb-overlay__source-panel {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 340px;
+  width: var(--emb-panel-w);
   max-width: 90vw;
   z-index: 20;
   background: rgba(10, 12, 20, 0.96);
@@ -2753,10 +2798,8 @@ a:hover { text-decoration: underline; }
   border-left: 1px solid rgba(255,255,255,0.1);
   display: flex;
   flex-direction: column;
-  padding: 0;
   overflow: hidden;
   pointer-events: auto;
-  /* slide in from right */
   animation: emb-panel-in 0.18s ease;
 }
 @keyframes emb-panel-in {
@@ -2767,12 +2810,12 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 12px 10px;
+  padding: clamp(10px,1vw,16px) clamp(10px,1vw,16px) clamp(8px,0.8vw,12px);
   border-bottom: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;
 }
 .emb-overlay__source-panel-title {
-  font-size: 13px;
+  font-size: var(--emb-track-font);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -2780,8 +2823,9 @@ a:hover { text-decoration: underline; }
 }
 .emb-overlay__source-panel-loading,
 .emb-overlay__source-panel-empty {
-  padding: 16px 12px;
+  padding: clamp(12px,1.2vw,20px);
   text-align: center;
+  font-size: var(--emb-track-font);
 }
 .emb-overlay__source-list {
   list-style: none;
@@ -2794,7 +2838,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 8px;
+  padding: 0 clamp(6px,0.6vw,10px);
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 .emb-overlay__source-item.is-playing {
@@ -2807,7 +2851,7 @@ a:hover { text-decoration: underline; }
   color: #fff;
   cursor: pointer;
   text-align: left;
-  padding: 10px 4px;
+  padding: clamp(8px,0.8vw,12px) 4px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -2818,7 +2862,7 @@ a:hover { text-decoration: underline; }
   background: rgba(255,255,255,0.06);
 }
 .emb-overlay__source-name {
-  font-size: 13px;
+  font-size: var(--emb-ctrl-font);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -2831,15 +2875,15 @@ a:hover { text-decoration: underline; }
   align-items: center;
 }
 .emb-overlay__source-title {
-  font-size: 11px;
+  font-size: var(--emb-track-font);
   color: rgba(255,255,255,0.5);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 160px;
+  max-width: clamp(120px,14vw,200px);
 }
 .emb-overlay__source-quality {
-  font-size: 11px;
+  font-size: var(--emb-track-font);
   font-weight: 700;
   color: var(--accent, #6aa3ff);
   background: rgba(100,163,255,0.12);
@@ -2867,7 +2911,7 @@ a:hover { text-decoration: underline; }
   color: var(--accent, #6aa3ff);
   border: 1px solid rgba(100,163,255,0.4);
 }
-/* When source panel is open, keep controls visible and don't cursor:none */
+/* When source panel is open keep chrome visible */
 .emb-overlay.source-panel-open .emb-overlay__header,
 .emb-overlay.source-panel-open .emb-overlay__controls {
   opacity: 1;

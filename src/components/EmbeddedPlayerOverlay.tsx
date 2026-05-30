@@ -138,6 +138,12 @@ export default function EmbeddedPlayerOverlay() {
   const [dragging, setDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
   const prevVolumeRef = useRef(100);
+  /** Ref to the current volume (avoids stale closure in wheel handler). */
+  const volumeRef = useRef(100);
+  /** Timer for dismissing the volume toast. */
+  const volumeToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Timeout id used to detect double-click (not a real dblclick event guard). */
+  const dblClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---- E8: Next Episode state ----------------------------------------------
 
@@ -167,6 +173,8 @@ export default function EmbeddedPlayerOverlay() {
 
   /** Whether the dev stats HUD is visible (hidden by default — Part 4). */
   const [statsVisible, setStatsVisible] = useState(false);
+  /** Temporary volume feedback text ("Volume 65%"), null when hidden. */
+  const [volumeToast, setVolumeToast] = useState<string | null>(null);
 
   // ---- Store subscription --------------------------------------------------
 
@@ -515,6 +523,11 @@ export default function EmbeddedPlayerOverlay() {
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { runningRef.current = running; }, [running]);
+  // Mirror current volume into ref without depending on the `volume`
+  // const declared later in the render scope.
+  useEffect(() => {
+    volumeRef.current = playbackState?.volume ?? 100;
+  }, [playbackState?.volume]);
 
   useEffect(() => {
     if (running) showControls();
@@ -539,6 +552,101 @@ export default function EmbeddedPlayerOverlay() {
   useEffect(() => () => clearHideTimer(), [clearHideTimer]);
 
   const handleMouseActivity = useCallback(() => showControls(), [showControls]);
+
+  // ---- Volume toast helper ------------------------------------------------
+
+  const showVolumeToast = useCallback((vol: number) => {
+    setVolumeToast(`Volume ${Math.round(vol)}%`);
+    if (volumeToastTimerRef.current !== null) {
+      clearTimeout(volumeToastTimerRef.current);
+    }
+    volumeToastTimerRef.current = setTimeout(() => {
+      setVolumeToast(null);
+      volumeToastTimerRef.current = null;
+    }, 1200);
+  }, []);
+
+  // Cleanup toast timer on unmount.
+  useEffect(() => () => {
+    if (volumeToastTimerRef.current !== null) clearTimeout(volumeToastTimerRef.current);
+    if (dblClickTimerRef.current !== null) clearTimeout(dblClickTimerRef.current);
+  }, []);
+
+  // ---- Mouse wheel → volume -----------------------------------------------
+  // Attached to .emb-overlay__stage so the source panel and control bar
+  // capture wheel events before they bubble here (they call stopPropagation).
+
+  const handleWheelVolume = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      if (!running || !req) return;
+      // Skip when the user is interacting with an input control.
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "SELECT") return;
+      e.preventDefault(); // suppress page scroll
+      const delta = e.deltaY < 0 ? 5 : -5; // scroll up = louder
+      const next = Math.min(130, Math.max(0, volumeRef.current + delta));
+      setVolume(next);
+      showControls();
+      showVolumeToast(next);
+    },
+    [running, req, setVolume, showControls, showVolumeToast],
+  );
+
+  // ---- Stage click / double-click handlers --------------------------------
+  //
+  // Single click  → toggle play/pause  (fires after 250 ms to allow dblclick)
+  // Double click  → toggle fullscreen  (cancels the pending single-click)
+  //
+  // Both are suppressed when the click target is inside a control element
+  // (control bar, header, source panel, next-ep prompt, or any interactive).
+
+  /** Returns true when the click target is inside a UI control element. */
+  const isControlTarget = (e: React.MouseEvent<HTMLDivElement>): boolean => {
+    const el = e.target as HTMLElement;
+    return !!(
+      el.closest(".emb-overlay__controls") ||
+      el.closest(".emb-overlay__header") ||
+      el.closest(".emb-overlay__source-panel") ||
+      el.closest(".emb-overlay__next-ep") ||
+      el.closest("button") ||
+      el.closest("input") ||
+      el.closest("select")
+    );
+  };
+
+  /** Single click: schedule a play/pause toggle after 250 ms. */
+  const handleStageClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isControlTarget(e)) return;
+      if (!running || starting) return;
+      showControls();
+      // Schedule — will be cancelled if a second click arrives in time.
+      dblClickTimerRef.current = setTimeout(() => {
+        dblClickTimerRef.current = null;
+        togglePause();
+      }, 250);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [running, starting, togglePause, showControls],
+  );
+
+  /** Double click: cancel the pending play/pause timer, toggle fullscreen. */
+  const handleStageDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isControlTarget(e)) return;
+      // Cancel the single-click play/pause that was scheduled.
+      if (dblClickTimerRef.current !== null) {
+        clearTimeout(dblClickTimerRef.current);
+        dblClickTimerRef.current = null;
+      }
+      showControls();
+      if (fullscreenAvailable) {
+        void window.embeddedMpv?.setFullscreen(!isFullscreen);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fullscreenAvailable, isFullscreen, showControls],
+  );
 
   // ---- Fix stuck scrub drag -----------------------------------------------
   // mouseup can fire outside the <input> if the user drags quickly. This
@@ -737,7 +845,12 @@ export default function EmbeddedPlayerOverlay() {
       onMouseMove={handleMouseActivity}
       onMouseEnter={handleMouseActivity}
     >
-      <div className="emb-overlay__stage">
+      <div
+        className="emb-overlay__stage"
+        onWheel={handleWheelVolume}
+        onClick={handleStageClick}
+        onDoubleClick={handleStageDoubleClick}
+      >
         <canvas ref={canvasRef} className="emb-overlay__canvas" />
 
         {/* ── Loading indicator ── */}
@@ -811,6 +924,13 @@ export default function EmbeddedPlayerOverlay() {
           </div>
         )}
 
+        {/* ── Volume toast feedback ── */}
+        {volumeToast && (
+          <div className="emb-overlay__volume-toast" aria-live="polite">
+            {volumeToast}
+          </div>
+        )}
+
         {/* ── Next Episode prompt (bottom-right, above controls) ── */}
         {showNextEpPrompt && nextEpButtonLabel && (
           <div
@@ -840,6 +960,7 @@ export default function EmbeddedPlayerOverlay() {
             className="emb-overlay__source-panel"
             onMouseEnter={pinControls}
             onMouseLeave={unpinControls}
+            onWheel={(e) => e.stopPropagation()}
           >
             <div className="emb-overlay__source-panel-header">
               <span className="emb-overlay__source-panel-title">Sources</span>
