@@ -23,6 +23,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EmbeddedPlaybackState, MpvTrack } from "../../types/embedded-mpv.js";
 
+// ---- Dev flag ----------------------------------------------------------------
+
+const isDev =
+  typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+
+// ---- Error helpers -----------------------------------------------------------
+
+/** Convert raw native-addon / IPC errors into user-readable messages. */
+function friendlyError(e: unknown): string {
+  const raw =
+    typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+  if (/libmpv/i.test(raw))
+    return "libmpv not found. Place libmpv-2.dll in the vendor/ folder next to the app.";
+  if (/libEGL|libGLES|ANGLE/i.test(raw))
+    return "ANGLE DLLs not found. Place libEGL.dll and libGLESv2.dll in vendor/.";
+  if (/Cannot find module|nativeAddon|embedded.?mpv/i.test(raw))
+    return "Embedded player addon not built. Run: cd native/embedded-mpv && npm run build";
+  return raw;
+}
+
+
 // ---- Progress constants (match mpvIpc.ts) ------------------------------------
 
 const PROGRESS_POLL_MS = 5_000;
@@ -195,6 +216,13 @@ export function useEmbeddedPlayback(): UseEmbeddedPlaybackReturn {
     return () => clearInterval(id);
   }, [running, flushProgress]);
 
+  // ---- Flush progress on app quit (beforeunload) --------------------------
+
+  useEffect(() => {
+    window.addEventListener("beforeunload", flushProgress);
+    return () => window.removeEventListener("beforeunload", flushProgress);
+  }, [flushProgress]);
+
   // ---- Frame drawing -------------------------------------------------------
 
   const drawFrame = useCallback(
@@ -302,7 +330,7 @@ export function useEmbeddedPlayback(): UseEmbeddedPlaybackReturn {
 
     const api = window.embeddedMpv;
     if (api) void api.stop().catch(() => {});
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.log("[embedded:stop] native session stopped");
     }
   }, [stopLoop, flushProgress]);
@@ -334,26 +362,41 @@ export function useEmbeddedPlayback(): UseEmbeddedPlaybackReturn {
       setPlaybackState(null);
       setStarting(true);
 
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.log("[embedded:start] calling api.start()", url.slice(0, 80));
       }
 
       // E5 fix: pass startSeconds so libmpv can seek on MPV_EVENT_FILE_LOADED.
-      if (import.meta.env.DEV && context?.startSeconds) {
+      if (isDev && context?.startSeconds) {
         console.log("[embedded:resume] seeking to", context.startSeconds, "s on file load");
       }
       let res: { ok: boolean; error?: string };
       try {
-        res = await api.start(url, context?.startSeconds);
+        // Race against a 30-second timeout so the UI never stays stuck in
+        // "Starting…" if the native addon hangs during init.
+        const startPromise = api.start(url, context?.startSeconds);
+        const timeoutPromise = new Promise<{ ok: false; error: string }>(
+          (resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  ok: false,
+                  error:
+                    "Embedded player start timed out after 30 s. Check that libmpv-2.dll is present.",
+                }),
+              30_000,
+            ),
+        );
+        res = await Promise.race([startPromise, timeoutPromise]);
       } catch (e) {
         if (cancelledRef.current) return;
         setStarting(false);
-        setError(e instanceof Error ? e.message : String(e));
+        setError(friendlyError(e));
         return;
       }
 
       if (cancelledRef.current) {
-        if (import.meta.env.DEV) {
+        if (isDev) {
           console.log("[embedded:start] cancelled after api.start() — ignoring stale invocation");
         }
         return;
@@ -362,11 +405,11 @@ export function useEmbeddedPlayback(): UseEmbeddedPlaybackReturn {
       setStarting(false);
 
       if (!res.ok) {
-        setError(res.error ?? "Native addon failed to start.");
+        setError(friendlyError(res.error ?? "Native addon failed to start."));
         return;
       }
 
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.log("[embedded:start] native session started — beginning RAF loop");
       }
 

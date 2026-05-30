@@ -42,6 +42,10 @@ import type { MpvTrack } from "../types/embedded-mpv.js";
 import type { SeriesNextEpisode } from "../types/preload.js";
 import type { StreamSourceResult, StremioStream } from "../core/stremio/types.js";
 
+// Dev flag — safe in both Vite (renderer) and plain Node.
+const isDev =
+  typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+
 // ---- Constants ---------------------------------------------------------------
 
 const HIDE_DELAY_MS = 2500;
@@ -165,7 +169,7 @@ export default function EmbeddedPlayerOverlay() {
         });
         if (saved && !saved.completed && saved.progressSeconds > 10) {
           startSeconds = saved.progressSeconds;
-          if (import.meta.env.DEV) {
+          if (isDev) {
             console.log(
               "[embedded:resume] found saved progress:",
               startSeconds,
@@ -230,7 +234,7 @@ export default function EmbeddedPlayerOverlay() {
       if (cancelled || !next) return;
 
       setNextEpisode(next);
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.log("[next-ep] resolved:", nextEpLabel(next), next.videoId);
       }
 
@@ -245,7 +249,7 @@ export default function EmbeddedPlayerOverlay() {
 
       // 3. Fire-and-forget prefetch (non-blocking).
       prefetchEpisodeSources(addons, "series", req.mediaId, next.videoId, profileId);
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.log("[next-ep] prefetch triggered for", next.videoId);
       }
 
@@ -276,7 +280,7 @@ export default function EmbeddedPlayerOverlay() {
           if (!cancelled) {
             setNextSource(best);
             setNextSourceLoading(false);
-            if (import.meta.env.DEV) {
+            if (isDev) {
               console.log(
                 "[next-ep] source preselected:",
                 best?.stream.name ?? "(none)",
@@ -291,7 +295,7 @@ export default function EmbeddedPlayerOverlay() {
           setTimeout(pollForSource, POLL_INTERVAL);
         } else {
           if (!cancelled) setNextSourceLoading(false);
-          if (import.meta.env.DEV) {
+          if (isDev) {
             console.log("[next-ep] prefetch timed out — no source preselected");
           }
         }
@@ -317,7 +321,7 @@ export default function EmbeddedPlayerOverlay() {
     const remaining = duration - timePos;
     const shouldShow = remaining > 0 && remaining <= NEXT_EP_PROMPT_SECS;
     setShowNextEpPrompt(shouldShow);
-    if (import.meta.env.DEV && shouldShow) {
+    if (isDev && shouldShow) {
       console.log(`[next-ep] prompt shown — ${remaining.toFixed(0)}s remaining`);
     }
   }, [playbackState?.timePos, playbackState?.duration, nextEpisode, running]);
@@ -327,7 +331,7 @@ export default function EmbeddedPlayerOverlay() {
   const handleNextEpisode = useCallback(() => {
     if (!nextEpisode || !nextSource || transitioning || profileId === null || !req) return;
     setTransitioning(true);
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.log("[next-ep] clicked — transitioning to", nextEpLabel(nextEpisode));
     }
     // Build the new PlayRequest for the next episode.
@@ -430,6 +434,24 @@ export default function EmbeddedPlayerOverlay() {
   useEffect(() => () => clearHideTimer(), [clearHideTimer]);
 
   const handleMouseActivity = useCallback(() => showControls(), [showControls]);
+
+  // ---- Fix stuck scrub drag -----------------------------------------------
+  // mouseup can fire outside the <input> if the user drags quickly. This
+  // window-level handler catches those releases and commits the seek.
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onGlobalMouseUp = () => {
+      if (!draggingRef.current) return;
+      const val = dragValue;
+      draggingRef.current = false;
+      setDragging(false);
+      seekTo(val);
+      unpinControls();
+    };
+    window.addEventListener("mouseup", onGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", onGlobalMouseUp);
+  }, [dragging, dragValue, seekTo, unpinControls]);
 
   // ---- Keyboard shortcuts --------------------------------------------------
 
@@ -628,8 +650,10 @@ export default function EmbeddedPlayerOverlay() {
           <div className="emb-overlay__errors">
             {!available && (
               <div className="error-banner emb-overlay__banner" role="alert">
-                Embedded player bridge unavailable (<code>window.embeddedMpv</code>{" "}
-                missing). Rebuild the app.
+                Embedded player addon unavailable — <code>window.embeddedMpv</code> is
+                missing. Make sure the native addon is built (
+                <code>native/embedded-mpv/</code>) and all DLLs are present in{" "}
+                <code>vendor/</code>.
               </div>
             )}
             {error && (
