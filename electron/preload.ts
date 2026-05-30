@@ -196,6 +196,11 @@ const embeddedMpv = {
   // E5 fix: BrowserWindow fullscreen (DOM requestFullscreen unreliable in Electron).
   setFullscreen: (fullscreen: boolean) =>
     ipcRenderer.invoke(IPC.EmbeddedSetFullscreen, fullscreen),
+  // Profile-scoped volume persistence.
+  getVolume: (profileId: number) =>
+    ipcRenderer.invoke(IPC.EmbeddedGetVolume, { profileId }) as Promise<number | null>,
+  setVolume: (profileId: number, volume: number) =>
+    ipcRenderer.invoke(IPC.EmbeddedSetVolume, { profileId, volume }),
   // Subscribe to fullscreen state changes pushed from the main process.
   // Returns an unsubscribe function.
   onFullscreenChange: (cb: (isFullscreen: boolean) => void): (() => void) => {

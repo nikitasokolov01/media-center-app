@@ -142,6 +142,8 @@ export default function EmbeddedPlayerOverlay() {
   const volumeRef = useRef(100);
   /** Timer for dismissing the volume toast. */
   const volumeToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Debounce timer for persisting volume to the DB. */
+  const saveVolumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Timeout id used to detect double-click (not a real dblclick event guard). */
   const dblClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -228,6 +230,20 @@ export default function EmbeddedPlayerOverlay() {
 
       if (cancelled) return;
 
+      // Load saved volume for this profile and apply it before starting.
+      try {
+        const savedVol = await window.embeddedMpv?.getVolume(profileId);
+        if (typeof savedVol === "number") {
+          // Optimistically update local state; the actual mpv volume will be
+          // set via command() after the session starts (see below).
+          volumeRef.current = savedVol;
+          prevVolumeRef.current = savedVol > 0 ? savedVol : prevVolumeRef.current;
+        }
+      } catch {
+        // Non-fatal — fall back to mpv default.
+      }
+      if (cancelled) return;
+
       const ctx: EmbeddedProgressContext = {
         profileId,
         type: req.type,
@@ -243,6 +259,10 @@ export default function EmbeddedPlayerOverlay() {
       };
 
       await startPlayback(req.streamUrl, ctx);
+      // Apply saved volume after session starts (mpv resets to 100 on start).
+      if (!cancelled && typeof volumeRef.current === "number") {
+        void window.embeddedMpv?.command("volume", volumeRef.current).catch(() => {});
+      }
     };
 
     void doStart();
@@ -553,6 +573,17 @@ export default function EmbeddedPlayerOverlay() {
 
   const handleMouseActivity = useCallback(() => showControls(), [showControls]);
 
+  // ---- Persist volume per profile ----------------------------------------
+
+  const saveVolume = useCallback((vol: number) => {
+    if (profileId === null) return;
+    if (saveVolumeTimerRef.current !== null) clearTimeout(saveVolumeTimerRef.current);
+    saveVolumeTimerRef.current = setTimeout(() => {
+      saveVolumeTimerRef.current = null;
+      void window.embeddedMpv?.setVolume(profileId, vol);
+    }, 400); // debounce 400 ms so rapid scroll/drag doesn't spam the DB
+  }, [profileId]);
+
   // ---- Volume toast helper ------------------------------------------------
 
   const showVolumeToast = useCallback((vol: number) => {
@@ -569,6 +600,7 @@ export default function EmbeddedPlayerOverlay() {
   // Cleanup toast timer on unmount.
   useEffect(() => () => {
     if (volumeToastTimerRef.current !== null) clearTimeout(volumeToastTimerRef.current);
+    if (saveVolumeTimerRef.current !== null) clearTimeout(saveVolumeTimerRef.current);
     if (dblClickTimerRef.current !== null) clearTimeout(dblClickTimerRef.current);
   }, []);
 
@@ -588,6 +620,7 @@ export default function EmbeddedPlayerOverlay() {
       setVolume(next);
       showControls();
       showVolumeToast(next);
+      saveVolume(next);
     },
     [running, req, setVolume, showControls, showVolumeToast],
   );
@@ -701,12 +734,10 @@ export default function EmbeddedPlayerOverlay() {
         case "M": {
           e.preventDefault();
           const vol = playbackState?.volume ?? 100;
-          if (vol > 0) {
-            prevVolumeRef.current = vol;
-            setVolume(0);
-          } else {
-            setVolume(prevVolumeRef.current || 100);
-          }
+          const next = vol > 0 ? 0 : (prevVolumeRef.current || 100);
+          if (vol > 0) prevVolumeRef.current = vol;
+          setVolume(next);
+          saveVolume(next);
           break;
         }
         case "f":
@@ -772,7 +803,9 @@ export default function EmbeddedPlayerOverlay() {
 
   const volume = playbackState?.volume ?? 100;
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVolume(Number(e.target.value));
+    const v = Number(e.target.value);
+    setVolume(v);
+    saveVolume(v);
   };
 
   // ---- Derived display values ---------------------------------------------
@@ -826,16 +859,18 @@ export default function EmbeddedPlayerOverlay() {
     : null;
   const currentOverlaySourceKey = currentSourceKey ?? bestOverlaySource?.key ?? null;
 
-  // ── Helper: quality badge text ────────────────────────────────────────────
   const qualityBadge = (result: StreamSourceResult | null): string | null => {
     if (!result) return null;
-    const text = [result.stream.name, result.stream.title]
-      .filter(Boolean)
-      .join(" ");
+    const text = [result.stream.name, result.stream.title].filter(Boolean).join(" ");
     const tier = detectResolution(text);
-    if (tier === "unknown" || tier === "cam") return null;
-    return tier;
+    return tier === "unknown" || tier === "cam" ? null : tier;
   };
+
+  // Mute icon based on volume level.
+  const muteIcon = volume === 0 ? "🔇" : volume < 50 ? "🔉" : "🔊";
+
+  // Next-episode skip button: only shown when a next episode is available.
+  const hasNextEp = !!nextEpisode;
 
   return (
     <div
@@ -853,7 +888,7 @@ export default function EmbeddedPlayerOverlay() {
       >
         <canvas ref={canvasRef} className="emb-overlay__canvas" />
 
-        {/* ── Loading indicator ── */}
+        {/* ── Loading spinner ── */}
         {starting && (
           <div className="emb-overlay__loading-indicator">
             <div className="emb-overlay__spinner" />
@@ -880,7 +915,7 @@ export default function EmbeddedPlayerOverlay() {
           </div>
         )}
 
-        {/* ── Header (top bar) ── */}
+        {/* ── Header ── */}
         <div className="emb-overlay__header">
           <div className="emb-overlay__title-area">
             <span className="emb-overlay__title" title={title}>
@@ -888,9 +923,7 @@ export default function EmbeddedPlayerOverlay() {
             </span>
             <span className="exp-badge">BETA</span>
           </div>
-
           <div className="emb-overlay__header-actions">
-            {/* Stats toggle */}
             <button
               type="button"
               className={`emb-overlay__ctrl emb-overlay__ctrl--icon emb-overlay__ctrl--ghost${statsVisible ? " is-active" : ""}`}
@@ -900,7 +933,6 @@ export default function EmbeddedPlayerOverlay() {
             >
               ⓘ
             </button>
-            {/* Close */}
             <button
               type="button"
               className="emb-overlay__close"
@@ -915,7 +947,7 @@ export default function EmbeddedPlayerOverlay() {
           </div>
         </div>
 
-        {/* ── Dev stats HUD (hidden by default, toggled via ⓘ button) ── */}
+        {/* ── Dev stats HUD ── */}
         {statsVisible && (
           <div className="emb-overlay__stats muted small">
             <span>{stats.fps.toFixed(1)} fps</span>
@@ -924,7 +956,7 @@ export default function EmbeddedPlayerOverlay() {
           </div>
         )}
 
-        {/* ── Volume toast feedback ── */}
+        {/* ── Volume toast ── */}
         {volumeToast && (
           <div className="emb-overlay__volume-toast" aria-live="polite">
             {volumeToast}
@@ -945,11 +977,9 @@ export default function EmbeddedPlayerOverlay() {
               disabled={!nextSource || transitioning}
               title={nextSource ? "Play next episode (N)" : "Preparing next episode…"}
             >
-              {transitioning
-                ? "Starting…"
-                : nextSourceLoading
-                  ? "Preparing next episode…"
-                  : `Next ▶ ${nextEpButtonLabel}`}
+              {transitioning ? "Starting…"
+                : nextSourceLoading ? "Preparing…"
+                : `Up Next ▶ ${nextEpButtonLabel}`}
             </button>
           </div>
         )}
@@ -973,7 +1003,6 @@ export default function EmbeddedPlayerOverlay() {
                 ✕
               </button>
             </div>
-
             {overlayLoading && (
               <div className="emb-overlay__source-panel-loading muted small">
                 Loading sources…
@@ -1016,9 +1045,7 @@ export default function EmbeddedPlayerOverlay() {
                               </span>
                             )}
                             {q && (
-                              <span className="emb-overlay__source-quality">
-                                {q}
-                              </span>
+                              <span className="emb-overlay__source-quality">{q}</span>
                             )}
                             <span className="emb-overlay__source-addon">
                               {r.source.addonName}
@@ -1053,7 +1080,7 @@ export default function EmbeddedPlayerOverlay() {
             onFocus={pinControls}
             onBlur={unpinControls}
           >
-            {/* Row 1: progress bar */}
+            {/* ── Row 1: progress bar ── */}
             <div className="emb-overlay__progress-row">
               <span className="emb-overlay__time">
                 {formatTime(dragging ? dragValue : timePos)}
@@ -1071,129 +1098,159 @@ export default function EmbeddedPlayerOverlay() {
                 aria-label="Seek"
                 title="Seek (← →)"
               />
-              <span className="emb-overlay__time">
+              <span className="emb-overlay__time emb-overlay__time--dur">
                 {formatTime(duration)}
               </span>
             </div>
 
-            {/* Row 2: transport buttons */}
+            {/* ── Row 2: transport ── */}
             <div className="emb-overlay__transport">
-              {/* Play/pause */}
-              <button
-                type="button"
-                className="emb-overlay__ctrl emb-overlay__ctrl--play"
-                onClick={togglePause}
-                title={paused ? "Play (Space)" : "Pause (Space)"}
-                aria-label={paused ? "Play" : "Pause"}
-                disabled={starting}
-              >
-                {paused ? "▶" : "⏸"}
-              </button>
 
-              {/* Volume */}
-              <button
-                type="button"
-                className="emb-overlay__ctrl emb-overlay__ctrl--icon"
-                onClick={() => {
-                  if (volume > 0) { prevVolumeRef.current = volume; setVolume(0); }
-                  else setVolume(prevVolumeRef.current || 100);
-                }}
-                title="Mute/unmute (M)"
-                aria-label={volume === 0 ? "Unmute" : "Mute"}
-              >
-                {volume === 0 ? "🔇" : volume < 50 ? "🔉" : "🔊"}
-              </button>
-              <input
-                type="range"
-                className="emb-overlay__volume"
-                min={0}
-                max={130}
-                step={1}
-                value={volume}
-                onChange={handleVolumeChange}
-                aria-label="Volume"
-                title="Volume"
-              />
-
-              {/* Spacer */}
-              <span className="emb-overlay__transport-spacer" />
-
-              {/* Subtitle track */}
-              {subtitleTracks.length > 0 ? (
-                <select
-                  className="emb-overlay__track-select"
-                  value={selectedSid}
-                  onChange={handleSubtitleChange}
-                  title="Subtitles"
-                  aria-label="Subtitle track"
+              {/* Left group */}
+              <div className="emb-overlay__transport-left">
+                {/* Play / Pause */}
+                <button
+                  type="button"
+                  className="emb-overlay__ctrl emb-overlay__ctrl--play"
+                  onClick={togglePause}
+                  title={paused ? "Play (Space)" : "Pause (Space)"}
+                  aria-label={paused ? "Play" : "Pause"}
+                  disabled={starting}
                 >
-                  <option value={-1}>CC: Off</option>
-                  {subtitleTracks.map((t, i) => (
-                    <option key={t.id} value={t.id}>
-                      CC: {trackLabel(t, i)}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
+                  {paused ? "▶" : "⏸"}
+                </button>
 
-              {/* Audio track */}
-              {audioTracks.length > 1 ? (
-                <select
-                  className="emb-overlay__track-select"
-                  value={selectedAid}
-                  onChange={handleAudioChange}
-                  title="Audio"
-                  aria-label="Audio track"
-                >
-                  {audioTracks.map((t, i) => (
-                    <option key={t.id} value={t.id}>
-                      🎵 {trackLabel(t, i)}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
+                {/* Next Episode (only if available) */}
+                {hasNextEp && (
+                  <button
+                    type="button"
+                    className="emb-overlay__ctrl emb-overlay__ctrl--icon"
+                    onClick={handleNextEpisode}
+                    disabled={!nextSource || transitioning}
+                    title="Next episode (N)"
+                    aria-label="Next episode"
+                  >
+                    ⏭
+                  </button>
+                )}
 
-              {/* Source picker toggle */}
-              <button
-                type="button"
-                className={`emb-overlay__ctrl emb-overlay__ctrl--icon${sourcePanelOpen ? " is-active" : ""}`}
-                onClick={() => {
-                  if (sourcePanelOpen) {
-                    setSourcePanelOpen(false);
-                  } else {
-                    void openSourcePanel();
-                  }
-                }}
-                title="Change source"
-                aria-label="Source picker"
-                onMouseEnter={pinControls}
-                onMouseLeave={unpinControls}
-              >
-                ⚙
-              </button>
-
-              {/* Fullscreen */}
-              {fullscreenAvailable && (
+                {/* Mute toggle */}
                 <button
                   type="button"
                   className="emb-overlay__ctrl emb-overlay__ctrl--icon"
-                  onClick={toggleFullscreen}
-                  title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen (F)"}
-                  aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  onClick={() => {
+                    const next = volume > 0 ? 0 : (prevVolumeRef.current || 100);
+                    if (volume > 0) prevVolumeRef.current = volume;
+                    setVolume(next);
+                    saveVolume(next);
+                  }}
+                  title="Mute/unmute (M)"
+                  aria-label={volume === 0 ? "Unmute" : "Mute"}
                 >
-                  {isFullscreen ? "⤡" : "⤢"}
+                  {muteIcon}
                 </button>
-              )}
 
-              {/* Stop */}
-              <button
-                type="button"
-                className="emb-overlay__ctrl emb-overlay__ctrl--stop"
-                onClick={handleClose}
-                title="Stop and close (Esc)"
-              >
-                ⏹
-              </button>
+                {/* Volume slider */}
+                <input
+                  type="range"
+                  className="emb-overlay__volume"
+                  min={0}
+                  max={130}
+                  step={1}
+                  value={volume}
+                  onChange={handleVolumeChange}
+                  aria-label="Volume"
+                  title="Volume"
+                />
+
+                {/* Volume label */}
+                <span className="emb-overlay__vol-label">
+                  {Math.round(volume)}%
+                </span>
+              </div>
+
+              {/* Right group */}
+              <div className="emb-overlay__transport-right">
+
+                {/* Subtitle track */}
+                {subtitleTracks.length > 0 ? (
+                  <div className="emb-overlay__track-wrap" title="Subtitles">
+                    <span className="emb-overlay__track-icon">CC</span>
+                    <select
+                      className="emb-overlay__track-select"
+                      value={selectedSid}
+                      onChange={handleSubtitleChange}
+                      aria-label="Subtitle track"
+                    >
+                      <option value={-1}>Off</option>
+                      {subtitleTracks.map((t, i) => (
+                        <option key={t.id} value={t.id}>
+                          {trackLabel(t, i)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {/* Audio track */}
+                {audioTracks.length > 1 ? (
+                  <div className="emb-overlay__track-wrap" title="Audio">
+                    <span className="emb-overlay__track-icon">♪</span>
+                    <select
+                      className="emb-overlay__track-select"
+                      value={selectedAid}
+                      onChange={handleAudioChange}
+                      aria-label="Audio track"
+                    >
+                      {audioTracks.map((t, i) => (
+                        <option key={t.id} value={t.id}>
+                          {trackLabel(t, i)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {/* Source picker */}
+                <button
+                  type="button"
+                  className={`emb-overlay__ctrl emb-overlay__ctrl--icon${sourcePanelOpen ? " is-active" : ""}`}
+                  onClick={() => {
+                    if (sourcePanelOpen) setSourcePanelOpen(false);
+                    else void openSourcePanel();
+                  }}
+                  title="Change source"
+                  aria-label="Source picker"
+                  onMouseEnter={pinControls}
+                  onMouseLeave={unpinControls}
+                >
+                  ⚙
+                </button>
+
+                {/* Fullscreen */}
+                {fullscreenAvailable && (
+                  <button
+                    type="button"
+                    className="emb-overlay__ctrl emb-overlay__ctrl--icon"
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen (F)"}
+                    aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  >
+                    {isFullscreen ? "⤡" : "⤢"}
+                  </button>
+                )}
+
+                {/* Stop / close */}
+                <button
+                  type="button"
+                  className="emb-overlay__ctrl emb-overlay__ctrl--stop"
+                  onClick={handleClose}
+                  title="Stop and close (Esc)"
+                  aria-label="Stop"
+                >
+                  ⏹
+                </button>
+              </div>
             </div>
           </div>
         )}

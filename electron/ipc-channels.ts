@@ -46,6 +46,9 @@ export const IPC = {
   // E5 fixes — fullscreen via BrowserWindow IPC (DOM requestFullscreen unreliable in Electron)
   EmbeddedSetFullscreen: "embedded:set-fullscreen",     // renderer → main
   EmbeddedFullscreenChanged: "embedded:fullscreen-changed", // main → renderer (push)
+  // Profile-scoped embedded player volume persistence
+  EmbeddedGetVolume: "embedded:get-volume",
+  EmbeddedSetVolume: "embedded:set-volume",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

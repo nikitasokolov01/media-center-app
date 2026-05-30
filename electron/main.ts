@@ -30,6 +30,8 @@ import {
   listLibrary,
   getAppSettings,
   updateAppSettings,
+  getSetting,
+  setSetting,
 } from "./db.js";
 import type {
   SetWatchedInput,
@@ -380,6 +382,18 @@ function registerIpcHandlers() {
   );
   // E4: read playback state (time-pos, duration, paused, volume, track-list JSON)
   ipcMain.handle(IPC.EmbeddedGetState, async () => embeddedGetState());
+
+  // Profile-scoped embedded player volume (profile-specific key-value).
+  ipcMain.handle(IPC.EmbeddedGetVolume, async (_e, args: { profileId: number }) => {
+    const raw = getSetting(`embeddedVol:${args.profileId}`);
+    if (raw === null) return null;
+    const n = Number(raw);
+    return isNaN(n) ? null : Math.min(130, Math.max(0, n));
+  });
+  ipcMain.handle(IPC.EmbeddedSetVolume, async (_e, args: { profileId: number; volume: number }) => {
+    const vol = Math.min(130, Math.max(0, args.volume));
+    setSetting(`embeddedVol:${args.profileId}`, String(vol));
+  });
 
   // Dev-only: insert a synthetic addon whose endpoints will fail to fetch,
   // to verify graceful per-row/per-page failure handling end-to-end. Gated to

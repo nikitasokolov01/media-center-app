@@ -2613,18 +2613,52 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: var(--emb-bar-gap);
 }
-/* Transport row: play, volume, spacer, tracks, source, fullscreen, stop */
+/* Transport row: left group | flex spacer | right group */
 .emb-overlay__transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+}
+.emb-overlay__transport-left {
   display: flex;
   align-items: center;
   gap: clamp(2px, 0.3vw, 6px);
 }
-.emb-overlay__transport-spacer { flex: 1; }
+.emb-overlay__transport-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(2px, 0.3vw, 6px);
+}
+/* Volume % label */
+.emb-overlay__vol-label {
+  font-size: var(--emb-time-font);
+  color: rgba(255,255,255,0.6);
+  min-width: 2.8ch;
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+/* Track icon + select wrapper — base layout; border/bg added below with :hover */
+.emb-overlay__track-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.emb-overlay__track-icon {
+  font-size: var(--emb-track-font);
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  padding: 0 4px 0 6px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  flex-shrink: 0;
+}
 /* Large play/pause button */
 .emb-overlay__ctrl--play {
   font-size: var(--emb-play-font);
   padding: 2px var(--emb-ctrl-pad-h);
   min-width: clamp(32px, 3vw, 48px);
+  font-weight: 400;
 }
 /* Ghost / active state for toggle buttons (stats, source) */
 .emb-overlay__ctrl--ghost {
@@ -2770,18 +2804,36 @@ a:hover { text-decoration: underline; }
 
 /* ── Track selects (subtitle / audio) ── */
 .emb-overlay__track-select {
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  border: none;
   border-radius: var(--radius);
   color: rgba(255, 255, 255, 0.8);
   font-size: var(--emb-track-font);
-  padding: clamp(2px,0.2vw,4px) clamp(5px,0.45vw,8px);
+  padding: clamp(2px,0.2vw,4px) clamp(4px,0.35vw,6px) clamp(2px,0.2vw,4px) 0;
   cursor: pointer;
   flex-shrink: 0;
-  max-width: clamp(100px, 10vw, 140px);
+  max-width: clamp(90px, 9vw, 130px);
+  outline: none;
+  /* Use system select arrow; keep it subtle */
+  appearance: auto;
+  -webkit-appearance: auto;
 }
-.emb-overlay__track-select:hover {
-  border-color: rgba(255, 255, 255, 0.4);
+.emb-overlay__track-select:hover,
+.emb-overlay__track-select:focus {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+}
+/* The wrapper gets the visible border/bg so icon + select look like one unit */
+.emb-overlay__track-wrap {
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: var(--radius);
+  background: rgba(0,0,0,0.45);
+  transition: border-color 0.15s, background 0.15s;
+}
+.emb-overlay__track-wrap:hover {
+  border-color: rgba(255,255,255,0.38);
+  background: rgba(255,255,255,0.06);
 }
 
 /* ── In-player source picker panel ── */

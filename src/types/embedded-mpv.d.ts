@@ -74,6 +74,13 @@ declare global {
        * Returns an unsubscribe function.
        */
       onFullscreenChange: (cb: (isFullscreen: boolean) => void) => () => void;
+      /**
+       * Profile-scoped embedded player volume persistence.
+       * getVolume returns the last saved volume (0–130) or null if never saved.
+       * setVolume persists the value to the app_settings table.
+       */
+      getVolume: (profileId: number) => Promise<number | null>;
+      setVolume: (profileId: number, volume: number) => Promise<void>;
     };
   }
 }
