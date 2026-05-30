@@ -11,7 +11,10 @@
     "build:electron": "tsc -p electron/tsconfig.json",
     "build": "npm run build:renderer && npm run build:electron",
     "start": "npm run build && electron .",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "build:embedded-mpv": "cd native/embedded-mpv && npm install && npm run build",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
@@ -35,13 +38,60 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.example.mediacenter",
+    "appId": "com.mediacenter.app",
+    "productName": "Media Center",
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "node_modules/better-sqlite3/lib/**/*",
+      "node_modules/better-sqlite3/package.json",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "!node_modules/better-sqlite3/deps/**/*",
+      "!node_modules/better-sqlite3/src/**/*",
+      "!node_modules/better-sqlite3/docs/**/*",
+      "!node_modules/better-sqlite3/test/**/*",
+      "!node_modules/better-sqlite3/binding.gyp"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+    ],
+    "extraResources": [
+      {
+        "from": "native/embedded-mpv/embedded-mpv.node",
+        "to": "native/embedded-mpv/embedded-mpv.node"
+      },
+      {
+        "from": "native/embedded-mpv/vendor",
+        "to": "native/embedded-mpv/vendor"
+      }
     ],
     "directories": {
-      "buildResources": "build"
-    }
+      "buildResources": "build",
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Media Center"
+    },
+    "publish": null
   }
 }

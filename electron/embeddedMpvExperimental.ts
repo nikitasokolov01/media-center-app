@@ -11,6 +11,7 @@
 
 import path from "node:path";
 import fs from "node:fs";
+import { app } from "electron";
 
 // Shape of the napi addon (native/embedded-mpv/src/lib.rs).
 interface EmbeddedAddon {
@@ -54,10 +55,29 @@ export interface EmbeddedFrame {
   rgba?: Buffer;
 }
 
-// Resolve <projectRoot>/native/embedded-mpv. In dev/build, this file compiles to
-// dist-electron/electron/embeddedMpvExperimental.js, so the project root is two
-// levels up.
-const ADDON_DIR = path.join(__dirname, "..", "..", "native", "embedded-mpv");
+// ---------------------------------------------------------------------------
+// Path resolution — dev vs. packaged
+//
+// Dev / unpackaged (npm run dev or npm start):
+//   __dirname = <project>/dist-electron/electron
+//   ADDON_DIR = <project>/native/embedded-mpv        (real filesystem)
+//
+// Packaged (electron-builder NSIS / dir):
+//   __dirname lands inside app.asar — native .node files CANNOT be loaded
+//   from inside an asar. electron-builder's `extraResources` copies the
+//   native files to <install>/resources/native/embedded-mpv/ which is a
+//   real filesystem path accessible via process.resourcesPath.
+// ---------------------------------------------------------------------------
+function resolveAddonDir(): string {
+  if (app.isPackaged) {
+    // process.resourcesPath = <install>/resources
+    return path.join(process.resourcesPath, "native", "embedded-mpv");
+  }
+  // __dirname = dist-electron/electron → two levels up = project root
+  return path.join(__dirname, "..", "..", "native", "embedded-mpv");
+}
+
+const ADDON_DIR = resolveAddonDir();
 const VENDOR_DIR = path.join(ADDON_DIR, "vendor");
 const LIBMPV_DLL = path.join(VENDOR_DIR, "libmpv-2.dll");
 
