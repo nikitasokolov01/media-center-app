@@ -1151,6 +1151,16 @@ export interface AppSettings {
   heroCatalogType: string;
   /** Catalog ID for hero catalog mode. */
   heroCatalogId: string;
+  /** Absolute path to the copied custom background image in userData/backgrounds/. Empty = none. */
+  customBackgroundImagePath: string;
+  /** Background image fit mode: "cover" | "contain". Default "cover". */
+  customBackgroundImageFit: string;
+  /** Background image position: "center" | "top" | "bottom". Default "center". */
+  customBackgroundImagePosition: string;
+  /** Dim overlay opacity (0-0.85). Default 0.45. */
+  customBackgroundImageDim: number;
+  /** Blur radius in px (0-20). Default 0. */
+  customBackgroundImageBlur: number;
 }
 
 const DEFAULTS: AppSettings = {
@@ -1181,6 +1191,11 @@ const DEFAULTS: AppSettings = {
   heroAddonId: "",
   heroCatalogType: "",
   heroCatalogId: "",
+  customBackgroundImagePath: "",
+  customBackgroundImageFit: "cover",
+  customBackgroundImagePosition: "center",
+  customBackgroundImageDim: 0.45,
+  customBackgroundImageBlur: 0,
 };
 
 export function getSetting(key: string): string | null {
@@ -1258,6 +1273,11 @@ export function getAppSettings(): AppSettings {
     heroAddonId: getSetting("heroAddonId") ?? DEFAULTS.heroAddonId,
     heroCatalogType: getSetting("heroCatalogType") ?? DEFAULTS.heroCatalogType,
     heroCatalogId: getSetting("heroCatalogId") ?? DEFAULTS.heroCatalogId,
+    customBackgroundImagePath: getSetting("customBackgroundImagePath") ?? DEFAULTS.customBackgroundImagePath,
+    customBackgroundImageFit: getSetting("customBackgroundImageFit") ?? DEFAULTS.customBackgroundImageFit,
+    customBackgroundImagePosition: getSetting("customBackgroundImagePosition") ?? DEFAULTS.customBackgroundImagePosition,
+    customBackgroundImageDim: Number(getSetting("customBackgroundImageDim") ?? DEFAULTS.customBackgroundImageDim),
+    customBackgroundImageBlur: Number(getSetting("customBackgroundImageBlur") ?? DEFAULTS.customBackgroundImageBlur),
   };
 }
 
@@ -1349,6 +1369,21 @@ export function updateAppSettings(patch: Partial<AppSettings>): AppSettings {
   }
   if (patch.heroCatalogId !== undefined) {
     setSetting("heroCatalogId", patch.heroCatalogId);
+  }
+  if (patch.customBackgroundImagePath !== undefined) {
+    setSetting("customBackgroundImagePath", patch.customBackgroundImagePath);
+  }
+  if (patch.customBackgroundImageFit !== undefined) {
+    setSetting("customBackgroundImageFit", patch.customBackgroundImageFit);
+  }
+  if (patch.customBackgroundImagePosition !== undefined) {
+    setSetting("customBackgroundImagePosition", patch.customBackgroundImagePosition);
+  }
+  if (patch.customBackgroundImageDim !== undefined) {
+    setSetting("customBackgroundImageDim", String(patch.customBackgroundImageDim));
+  }
+  if (patch.customBackgroundImageBlur !== undefined) {
+    setSetting("customBackgroundImageBlur", String(patch.customBackgroundImageBlur));
   }
   return getAppSettings();
 }

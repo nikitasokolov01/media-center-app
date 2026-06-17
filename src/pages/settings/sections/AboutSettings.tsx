@@ -78,12 +78,11 @@ export default function AboutSettings() {
       <h2 className="settings-panel__title">About / Debug</h2>
 
       <section className="settings-section">
-        <h3 className="settings-section__label">Media Center App</h3>
+        <h3 className="settings-section__label">Kino</h3>
         <p className="muted small">
           A Stremio-compatible media center built with Electron, React,
           TypeScript, and Vite. Addons are installed from their manifest URLs
-          and stream sources are fetched at playback time -- no hardcoded
-          providers.
+          and stream sources are fetched at playback time. No hardcoded providers.
         </p>
       </section>
 

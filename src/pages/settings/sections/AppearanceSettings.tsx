@@ -27,6 +27,18 @@ const BG_STYLE_OPTIONS = [
   { id: "neon-gradient",  label: "Neon\nGrad",  preview: "linear-gradient(135deg, #050713 0%, #0d0933 50%, #05130d 100%)" },
   { id: "custom-solid",   label: "Custom\nColor",  preview: "repeating-linear-gradient(45deg, #444 0px, #444 2px, #333 2px, #333 8px)" },
   { id: "custom-gradient", label: "Custom\nGrad",   preview: "repeating-linear-gradient(45deg, #226 0px, #226 2px, #113 2px, #113 8px)" },
+  { id: "custom-image",    label: "Custom\nImage",  preview: "repeating-linear-gradient(45deg, #3a2a1a 0px, #3a2a1a 4px, #1a1008 4px, #1a1008 10px)" },
+] as const;
+
+const BG_FIT_OPTIONS = [
+  { id: "cover",   label: "Cover"   },
+  { id: "contain", label: "Contain" },
+] as const;
+
+const BG_POS_OPTIONS = [
+  { id: "center", label: "Center" },
+  { id: "top",    label: "Top"    },
+  { id: "bottom", label: "Bottom" },
 ] as const;
 
 // Catalog descriptor shape (mirrors HomePage.tsx, used for hero source selection)
@@ -74,6 +86,13 @@ export default function AppearanceSettings() {
   const [gradientColorB, setGradientColorB] = useState(settings.bgGradientColorB || "#111520");
   const [gradientAngle, setGradientAngle] = useState(settings.bgGradientAngle ?? 135);
   const [exportIncludeCss, setExportIncludeCss] = useState(false);
+  const [bgImageStatus, setBgImageStatus] = useState<"idle" | "picking" | "error">("idle");
+  const [bgImageMissing, setBgImageMissing] = useState(false);
+  const [bgImageError, setBgImageError] = useState<string | null>(null);
+  const [bgImageDim, setBgImageDim] = useState(settings.customBackgroundImageDim ?? 0.45);
+  const [bgImageBlur, setBgImageBlur] = useState(settings.customBackgroundImageBlur ?? 0);
+  const bgImageDimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bgImageBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const customCssSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -101,6 +120,8 @@ export default function AppearanceSettings() {
   useEffect(() => { setGradientColorA(settings.bgGradientColorA || "#0a0d14"); }, [settings.bgGradientColorA]);
   useEffect(() => { setGradientColorB(settings.bgGradientColorB || "#111520"); }, [settings.bgGradientColorB]);
   useEffect(() => { setGradientAngle(settings.bgGradientAngle ?? 135); }, [settings.bgGradientAngle]);
+  useEffect(() => { setBgImageDim(settings.customBackgroundImageDim ?? 0.45); }, [settings.customBackgroundImageDim]);
+  useEffect(() => { setBgImageBlur(settings.customBackgroundImageBlur ?? 0); }, [settings.customBackgroundImageBlur]);
 
   async function save(patch: Parameters<typeof update>[0]) {
     setSaveError(null);
@@ -111,15 +132,42 @@ export default function AppearanceSettings() {
     }
   }
 
+  // --- Custom background image ---
+  const handleChooseImage = useCallback(async () => {
+    setBgImageStatus("picking");
+    setBgImageError(null);
+    try {
+      const result = await window.mediaCenter.bg.chooseImage();
+      if (!result) { setBgImageStatus("idle"); return; } // cancelled
+      if (!result.ok) { setBgImageError(result.error); setBgImageStatus("error"); return; }
+      await save({ backgroundStyle: "custom-image", customBackgroundImagePath: result.path });
+      setBgImageMissing(false);
+      setBgImageStatus("idle");
+    } catch (e) {
+      setBgImageError(e instanceof Error ? e.message : String(e));
+      setBgImageStatus("error");
+    }
+  }, [save]);
+
+  const handleRemoveImage = useCallback(async () => {
+    const imgPath = settings.customBackgroundImagePath;
+    await save({ backgroundStyle: "", customBackgroundImagePath: "" });
+    if (imgPath) {
+      try { await window.mediaCenter.bg.removeImage({ imagePath: imgPath }); } catch {}
+    }
+  }, [save, settings.customBackgroundImagePath]);
+
   const currentTheme = settings.themeId || "default-dark";
 
   // --- Export theme as JSON file ---
   const handleExportTheme = useCallback(() => {
+    // Note: custom-image background style is not exported because the image file is local-only.
+    const exportBgStyle = settings.backgroundStyle === "custom-image" ? "" : (settings.backgroundStyle || "");
     const payload: Record<string, string> = {
       themeId: settings.themeId || "default-dark",
       accentColor: settings.accentColor || "",
       posterRadius: settings.posterRadius || "soft",
-      backgroundStyle: settings.backgroundStyle || "",
+      backgroundStyle: exportBgStyle,
       customBackgroundColor: settings.customBackgroundColor || "",
       customBackgroundGradient: settings.customBackgroundGradient || "",
     };
@@ -547,6 +595,148 @@ export default function AppearanceSettings() {
             </span>
           </div>
         )}
+
+        {/* --- Custom Image panel --- */}
+        {currentBgStyle === "custom-image" && (
+          <div className="bg-image-panel">
+            {bgImageError && (
+              <div className="error-banner" style={{ marginBottom: 8 }}>{bgImageError}</div>
+            )}
+            <div className="bg-image-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={bgImageStatus === "picking"}
+                onClick={() => void handleChooseImage()}
+              >
+                {bgImageStatus === "picking" ? "Choosing..." : "Choose Image"}
+              </button>
+              {settings.customBackgroundImagePath && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void handleRemoveImage()}
+                >
+                  Remove Image
+                </button>
+              )}
+            </div>
+            {settings.customBackgroundImagePath ? (
+              <div style={{ marginTop: 8 }}>
+                {bgImageMissing && (
+                  <div className="error-banner" style={{ marginBottom: 6 }}>
+                    Image file not found. Please choose a new image.
+                  </div>
+                )}
+                <img
+                  src={`kino-local://bg/${encodeURIComponent(
+                    settings.customBackgroundImagePath.replace(/\\/g, "/").split("/").pop() ?? ""
+                  )}`}
+                  alt="Background preview"
+                  style={{
+                    display: "block",
+                    width: 160,
+                    height: 90,
+                    objectFit: "cover",
+                    borderRadius: 4,
+                    border: "1px solid var(--color-border)",
+                  }}
+                  onLoad={() => setBgImageMissing(false)}
+                  onError={() => setBgImageMissing(true)}
+                />
+                <p className="muted small" style={{ marginTop: 4, wordBreak: "break-all" }}>
+                  {settings.customBackgroundImagePath.split(/[\\/]/).pop()}
+                </p>
+              </div>
+            ) : (
+              <p className="muted small" style={{ marginTop: 6 }}>
+                No image selected. Only .jpg, .png, .webp files are supported.
+              </p>
+            )}
+
+            {settings.customBackgroundImagePath && (
+              <>
+                {/* Fit */}
+                <div className="bg-image-control-row" style={{ marginTop: 14 }}>
+                  <span className="muted small" style={{ minWidth: 60 }}>Fit</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {BG_FIT_OPTIONS.map((opt) => (
+                      <label key={opt.id} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 13 }}>
+                        <input
+                          type="radio"
+                          name="bgImageFit"
+                          value={opt.id}
+                          checked={(settings.customBackgroundImageFit || "cover") === opt.id}
+                          onChange={() => void save({ customBackgroundImageFit: opt.id })}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Position */}
+                <div className="bg-image-control-row" style={{ marginTop: 8 }}>
+                  <span className="muted small" style={{ minWidth: 60 }}>Position</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {BG_POS_OPTIONS.map((opt) => (
+                      <label key={opt.id} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 13 }}>
+                        <input
+                          type="radio"
+                          name="bgImagePos"
+                          value={opt.id}
+                          checked={(settings.customBackgroundImagePosition || "center") === opt.id}
+                          onChange={() => void save({ customBackgroundImagePosition: opt.id })}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dim */}
+                <div className="bg-image-control-row" style={{ marginTop: 8 }}>
+                  <span className="muted small" style={{ minWidth: 60 }}>Dim: {Math.round(bgImageDim * 100)}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={0.85}
+                    step={0.01}
+                    value={bgImageDim}
+                    className="bg-gradient-angle-slider"
+                    style={{ flex: 1 }}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setBgImageDim(v);
+                      if (bgImageDimTimer.current) clearTimeout(bgImageDimTimer.current);
+                      bgImageDimTimer.current = setTimeout(() => { void save({ customBackgroundImageDim: v }); }, 150);
+                    }}
+                  />
+                </div>
+
+                {/* Blur */}
+                <div className="bg-image-control-row" style={{ marginTop: 8 }}>
+                  <span className="muted small" style={{ minWidth: 60 }}>Blur: {Math.round(bgImageBlur)}px</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={20}
+                    step={1}
+                    value={bgImageBlur}
+                    className="bg-gradient-angle-slider"
+                    style={{ flex: 1 }}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setBgImageBlur(v);
+                      if (bgImageBlurTimer.current) clearTimeout(bgImageBlurTimer.current);
+                      bgImageBlurTimer.current = setTimeout(() => { void save({ customBackgroundImageBlur: v }); }, 150);
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       {/* --- E. Custom CSS --- */}
@@ -738,6 +928,7 @@ export default function AppearanceSettings() {
             type="button"
             className="ghost-button"
             onClick={() => {
+              const oldPath = settings.customBackgroundImagePath;
               void save({
                 themeId: "",
                 accentColor: "",
@@ -747,11 +938,20 @@ export default function AppearanceSettings() {
                 customBackgroundColor: "",
                 customBackgroundGradient: "",
                 activeCustomThemeId: "",
+                customBackgroundImagePath: "",
+                customBackgroundImageFit: "cover",
+                customBackgroundImagePosition: "center",
+                customBackgroundImageDim: 0.45,
+                customBackgroundImageBlur: 0,
               });
               setCustomCssInput("");
               setAccentHexInput("");
               setBgColorInput("");
               setBgGradientInput("");
+              // Try to delete the copied bg image file; ignore errors
+              if (oldPath) {
+                void window.mediaCenter.bg.removeImage({ imagePath: oldPath }).catch(() => {});
+              }
             }}
           >
             Reset all appearance

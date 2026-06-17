@@ -59,6 +59,9 @@ export const IPC = {
   // Source preference memory (Phase 3)
   SourcePrefSave: "source-pref:save",
   SourcePrefGet: "source-pref:get",
+  // Custom background image picker
+  BgChooseImage: "bg:choose-image",
+  BgRemoveImage: "bg:remove-image",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

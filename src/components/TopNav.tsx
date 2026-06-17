@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useProfile } from "../state/ProfileContext.js";
+import KinoLogo from "./KinoLogo.js";
 import ProfileAvatar from "./ProfileAvatar.js";
 import { MaximizeIcon, MinimizeIcon } from "./PlayerIcons.js";
 
@@ -87,7 +88,7 @@ export default function TopNav() {
             end
             className="top-nav__brand"
           >
-            Media Center
+            <KinoLogo mode="wordmark" size={18} />
           </NavLink>
           <nav className="top-nav__nav">
             <NavLink

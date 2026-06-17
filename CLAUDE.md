@@ -1,4 +1,4 @@
-# CLAUDE.md — Media Center App
+# CLAUDE.md — Kino
 
 Project memory for future Claude sessions. Keep this accurate; if a detail is
 uncertain, the note says "verify in code." Do not invent features.
@@ -7,7 +7,7 @@ Current session handoff notes, if present, live in docs/current-session-handoff.
 
 ## 1. Project Overview
 
-Electron + React + TypeScript desktop media center, compatible with
+**Kino** — Electron + React + TypeScript desktop media center, compatible with
 Stremio addons. It can install addon `manifest.json` URLs and read their
 catalogs/meta/streams. Implemented capabilities: installing addons, browsing
 catalogs, expanded catalog pages, global search, metadata detail pages,
@@ -37,6 +37,9 @@ MPV remains the default/fallback. See section 10 and handoff doc for details.
 - **MPV** — external player launched via `child_process.spawn` (not an npm dep;
   user installs MPV, path configurable in Settings)
 - Dev/build: electron-builder, concurrently, cross-env, wait-on
+- `build.productName` = "Kino" (changed from "Media Center"); `appId` and `name` unchanged
+  to keep existing user data accessible. userData is pinned via `app.setPath("userData", ...)`
+  in `main.ts` to `AppData/Roaming/Media Center` for backward compatibility.
 - Scripts: `npm run dev` (Vite + tsc + Electron), `npm run build`, `npm start`
 
 ### Code layout
@@ -540,6 +543,38 @@ Settings → Appearance section. Changes apply immediately without restart.
 - `heroAddonId: string` -- stored as `"heroAddonId"`. Addon ID for catalog mode. Empty = not set.
 - `heroCatalogType: string` -- stored as `"heroCatalogType"`. Catalog type (e.g., "movie", "series") for catalog mode.
 - `heroCatalogId: string` -- stored as `"heroCatalogId"`. Catalog ID for catalog mode.
+- `customBackgroundImagePath: string` -- stored as `"customBackgroundImagePath"`. Absolute path to the copied image file in userData/backgrounds/. Empty = none.
+- `customBackgroundImageFit: string` -- stored as `"customBackgroundImageFit"`. "cover" or "contain". Default "cover".
+- `customBackgroundImagePosition: string` -- stored as `"customBackgroundImagePosition"`. "center", "top", or "bottom". Default "center".
+- `customBackgroundImageDim: number` -- stored as `"customBackgroundImageDim"`. Overlay opacity 0-0.85. Default 0.45.
+- `customBackgroundImageBlur: number` -- stored as `"customBackgroundImageBlur"`. Blur radius in px 0-20. Default 0.
+
+### Custom image background
+
+When `backgroundStyle = "custom-image"`, ThemeProvider Effect 7 sets CSS variables on
+`<html>` and adds the class `has-bg-image`. CSS rules in `styles.css` use `body::before`
+(image layer, z-index:-1) and `body::after` (dim overlay, z-index:-1) to paint the
+background behind all app content. Body and .content backgrounds become transparent via
+`--app-bg-override: transparent`.
+
+Image is copied from user selection to `userData/backgrounds/custom-background.{ext}`
+via IPC (`bg:choose-image`). The file is served via the `kino-local://bg/<filename>`
+custom Electron protocol (registered in main.ts before app.whenReady()) which avoids
+`file://` CORS restrictions when the renderer is at `http://localhost` in dev mode.
+
+CSS vars set by Effect 7: `--bg-img-url`, `--bg-img-fit`, `--bg-img-pos`, `--bg-img-dim`,
+`--bg-img-blur`, `--bg-img-margin`. Blur uses negative margin to hide edge artifacts.
+
+Custom themes and custom image backgrounds are compatible -- the image shows even when
+a custom theme is active (the `!activeCustomThemeId` constraint was removed).
+
+AppearanceSettings shows a 160x90 preview thumbnail loaded via `kino-local://` with
+`onLoad`/`onError` handlers for file-missing detection.
+
+Removal: `bg:remove-image` deletes the copied file; settings reset to empty string.
+Controls: fit (cover/contain), position (center/top/bottom), dim (0-0.85), blur (0-20px).
+Export excludes custom-image style (image files are local-only, not portable).
+Supported formats: jpg, jpeg, png, webp.
 
 ### Rules for future work
 

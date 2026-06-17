@@ -1,7 +1,8 @@
 // Electron main process: window lifecycle + IPC handlers wiring the core
 // Stremio module and the SQLite layer.
 
-import { app, BrowserWindow, ipcMain, shell, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell, Menu } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import {
   initDb,
@@ -78,7 +79,7 @@ function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: "Media Center",
+    title: "Kino",
     backgroundColor: "#0f1115",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -412,6 +413,46 @@ function registerIpcHandlers() {
     },
   );
 
+  // Background image picker -- copies to userData/backgrounds/, returns absolute path
+  ipcMain.handle(IPC.BgChooseImage, async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win) return { ok: false as const, error: "No window" };
+    const bgDir = path.join(app.getPath("userData"), "backgrounds");
+    const result = await dialog.showOpenDialog(win, {
+      title: "Choose background image",
+      filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp"] }],
+      properties: ["openFile"],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    const srcPath = result.filePaths[0];
+    const ext = path.extname(srcPath).toLowerCase();
+    const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    if (!allowed.includes(ext)) {
+      return { ok: false as const, error: "Unsupported file type. Use jpg, png, or webp." };
+    }
+    await fs.promises.mkdir(bgDir, { recursive: true });
+    const destPath = path.join(bgDir, `custom-background${ext}`);
+    // Remove any old custom background files with different extensions
+    for (const oldExt of allowed) {
+      const oldPath = path.join(bgDir, `custom-background${oldExt}`);
+      if (oldPath !== destPath) {
+        try { await fs.promises.unlink(oldPath); } catch {}
+      }
+    }
+    await fs.promises.copyFile(srcPath, destPath);
+    return { ok: true as const, path: destPath };
+  });
+
+  ipcMain.handle(IPC.BgRemoveImage, async (_e, args: { imagePath: string }) => {
+    if (!args?.imagePath) return { ok: true as const };
+    try {
+      await fs.promises.unlink(args.imagePath);
+    } catch {
+      // File already deleted or never existed -- fine
+    }
+    return { ok: true as const };
+  });
+
   // App settings (global, not per-profile) ----------------------------------
   ipcMain.handle(IPC.SettingsGet, async () => getAppSettings());
   ipcMain.handle(
@@ -514,7 +555,19 @@ function registerIpcHandlers() {
   }
 }
 
+// Register kino-local:// as a privileged scheme BEFORE the app is ready.
+// This lets the renderer load local files (e.g. background images) from
+// userData/backgrounds/ without file:// CORS restrictions in dev or prod.
+protocol.registerSchemesAsPrivileged([
+  { scheme: "kino-local", privileges: { secure: true, standard: true, bypassCSP: true } },
+]);
+
 app.whenReady().then(() => {
+  // Pin userData to the legacy "Media Center" folder for backward compatibility.
+  // productName is now "Kino", which would otherwise move data to AppData/Roaming/Kino.
+  // Do NOT remove this: it keeps existing profiles, addons, and progress accessible.
+  app.setPath("userData", path.join(app.getPath("appData"), "Media Center"));
+
   // Remove the default Electron application menu (File/Edit/View/Window/Help).
   // Custom app navigation lives in the React sidebar — the native menu bar
   // is redundant and looks jarring in a media center UI.
@@ -523,6 +576,30 @@ app.whenReady().then(() => {
   initDb();
   registerIpcHandlers();
   createWindow();
+
+  // Serve userData/backgrounds/ files via kino-local://bg/<filename>.
+  // This avoids file:// CORS restrictions when the renderer is at http://localhost.
+  protocol.handle("kino-local", async (req) => {
+    try {
+      const url = new URL(req.url);
+      if (url.hostname !== "bg") return new Response("Not Found", { status: 404 });
+      const filename = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      if (!filename || filename.includes("..") || /[\/\\]/.test(filename)) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+      const ext = path.extname(filename).toLowerCase();
+      if (!allowed.includes(ext)) return new Response("Forbidden", { status: 403 });
+      const filePath = path.join(app.getPath("userData"), "backgrounds", filename);
+      const fileData = await fs.promises.readFile(filePath);
+      const mime = ext === ".png" ? "image/png"
+               : ext === ".webp" ? "image/webp"
+               : "image/jpeg";
+      return new Response(fileData, { headers: { "Content-Type": mime } });
+    } catch {
+      return new Response("Not Found", { status: 404 });
+    }
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

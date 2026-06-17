@@ -53,6 +53,11 @@ const FALLBACK: AppSettings = {
   heroAddonId: "",
   heroCatalogType: "",
   heroCatalogId: "",
+  customBackgroundImagePath: "",
+  customBackgroundImageFit: "cover",
+  customBackgroundImagePosition: "center",
+  customBackgroundImageDim: 0.45,
+  customBackgroundImageBlur: 0,
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);

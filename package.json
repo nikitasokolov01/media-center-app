@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.mediacenter.app",
-    "productName": "Media Center",
+    "productName": "Kino",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -92,7 +92,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Media Center"
+      "shortcutName": "Kino"
     },
     "publish": null
   }

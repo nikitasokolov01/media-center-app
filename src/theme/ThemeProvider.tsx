@@ -59,9 +59,23 @@ function buildBackground(
       const g = customGradient.trim();
       return g.includes("gradient(") ? g : null;
     }
+    case "custom-image":
+      // Image layer rendered as fixed divs in ThemeProvider JSX; body must be transparent.
+      return "transparent";
     default:
       return null;
   }
+}
+
+/** Convert an absolute OS path to a kino-local:// CSS url() for the custom background image.
+ *  The kino-local:// protocol is registered in main.ts and serves userData/backgrounds/ files.
+ *  This avoids file:// CORS restrictions when the renderer is at http://localhost in dev mode.
+ */
+function pathToKinoLocalUrl(p: string): string {
+  if (!p) return "";
+  const filename = p.replace(/\\/g, "/").split("/").pop() ?? "";
+  if (!filename) return "";
+  return `url("kino-local://bg/${encodeURIComponent(filename)}")`;
 }
 
 export default function ThemeProvider({ children }: ThemeProviderProps) {
@@ -79,6 +93,11 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
     bgGradientAngle,
     customThemes,
     activeCustomThemeId,
+    customBackgroundImagePath,
+    customBackgroundImageFit,
+    customBackgroundImagePosition,
+    customBackgroundImageDim,
+    customBackgroundImageBlur,
   } = settings;
 
   // 1. Apply data-theme attribute
@@ -209,6 +228,43 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
       document.documentElement.removeAttribute("data-theme");
     };
   }, []);
+
+  // Effect 7: Apply custom background image via CSS variables on <html>.
+  // Adds/removes the "has-bg-image" class which enables body::before/::after rules
+  // defined in styles.css. Uses kino-local:// protocol to avoid file:// CORS issues.
+  // Custom themes and built-in themes are both compatible with image backgrounds.
+  const showImageBg = backgroundStyle === "custom-image" && !!customBackgroundImagePath;
+  useEffect(() => {
+    const root = document.documentElement;
+    const vars = ["--bg-img-url", "--bg-img-fit", "--bg-img-pos", "--bg-img-dim", "--bg-img-blur", "--bg-img-margin"];
+    if (!showImageBg) {
+      root.classList.remove("has-bg-image");
+      for (const v of vars) root.style.removeProperty(v);
+      return;
+    }
+    const url = pathToKinoLocalUrl(customBackgroundImagePath);
+    if (!url) {
+      root.classList.remove("has-bg-image");
+      for (const v of vars) root.style.removeProperty(v);
+      return;
+    }
+    const fit = customBackgroundImageFit || "cover";
+    const pos = customBackgroundImagePosition || "center";
+    const dim = typeof customBackgroundImageDim === "number" ? customBackgroundImageDim : 0.45;
+    const blur = typeof customBackgroundImageBlur === "number" ? customBackgroundImageBlur : 0;
+    root.style.setProperty("--bg-img-url", url);
+    root.style.setProperty("--bg-img-fit", fit);
+    root.style.setProperty("--bg-img-pos", pos);
+    root.style.setProperty("--bg-img-dim", String(dim));
+    root.style.setProperty("--bg-img-blur", blur > 0 ? `blur(${blur}px)` : "none");
+    root.style.setProperty("--bg-img-margin", blur > 0 ? `-${blur * 2}px` : "0");
+    root.classList.add("has-bg-image");
+    return () => {
+      root.classList.remove("has-bg-image");
+      for (const v of vars) root.style.removeProperty(v);
+    };
+  }, [showImageBg, customBackgroundImagePath, customBackgroundImageFit,
+      customBackgroundImagePosition, customBackgroundImageDim, customBackgroundImageBlur]);
 
   return <>{children}</>;
 }

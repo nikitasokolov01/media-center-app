@@ -268,6 +268,16 @@ export interface AppSettings {
   heroCatalogType: string;
   /** Catalog ID for the hero in catalog mode. */
   heroCatalogId: string;
+  /** Local absolute path of the custom background image (copied to userData/backgrounds/). */
+  customBackgroundImagePath: string;
+  /** background-size value for custom image: "cover" | "contain". Default "cover". */
+  customBackgroundImageFit: string;
+  /** background-position value: "center" | "top" | "bottom". Default "center". */
+  customBackgroundImagePosition: string;
+  /** Dim overlay opacity over the custom image (0-1). Default 0.45. */
+  customBackgroundImageDim: number;
+  /** Blur amount in px applied to the custom image (0-20). Default 0. */
+  customBackgroundImageBlur: number;
 }
 
 /** Per-stream-format capability hints used by the action picker. */

@@ -161,6 +161,10 @@ const api = {
       experimentalEmbeddedPlayer?: boolean;
     }) => ipcRenderer.invoke(IPC.SettingsUpdate, patch),
   },
+  bg: {
+    chooseImage: () => ipcRenderer.invoke(IPC.BgChooseImage),
+    removeImage: (args: { imagePath: string }) => ipcRenderer.invoke(IPC.BgRemoveImage, args),
+  },
 };
 
 // `window.electronAPI` is the namespace spec'd for the MPV bridge.

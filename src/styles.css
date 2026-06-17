@@ -5585,3 +5585,85 @@ body {
   margin-top: 1px;
   flex-shrink: 0;
 }
+
+/* --- Kino brand mark / logo component --- */
+
+.kino-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.kino-logo__text {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  /* Slight visual refinement: lighten subtly on hover (inherits from parent link) */
+  transition: opacity 150ms ease;
+}
+
+/* --- Custom background image panel (Settings > Appearance > Background) --- */
+.bg-image-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--color-surface, var(--panel));
+  border: 1px solid var(--color-border, var(--border));
+  border-radius: var(--radius-md, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bg-image-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bg-image-control-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.bg-image-control-row input[type=range] {
+  flex: 1;
+}
+
+
+/* ===================================================================
+   Custom image background (applied via ThemeProvider Effect 7)
+   Uses body::before for the image layer and body::after for the dim
+   overlay. The kino-local:// protocol serves userData/backgrounds/.
+   --bg-img-url      : css url() value
+   --bg-img-fit      : background-size (cover or contain)
+   --bg-img-pos      : background-position (center, top, bottom)
+   --bg-img-dim      : rgba alpha for the dark overlay (0 - 0.85)
+   --bg-img-blur     : filter value (none or blur(Npx))
+   --bg-img-margin   : negative margin to hide blur edge artifacts
+   =================================================================== */
+html.has-bg-image body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  margin: var(--bg-img-margin, 0);
+  background-image: var(--bg-img-url, none);
+  background-size: var(--bg-img-fit, cover);
+  background-position: var(--bg-img-pos, center);
+  background-repeat: no-repeat;
+  filter: var(--bg-img-blur, none);
+  z-index: -1;
+  pointer-events: none;
+}
+
+html.has-bg-image body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, var(--bg-img-dim, 0.45));
+  z-index: -1;
+  pointer-events: none;
+}

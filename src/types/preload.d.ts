@@ -237,6 +237,16 @@ export interface MediaCenterApi {
       sourceName: string;
     } | null>;
   };
+  bg: {
+    /**
+     * Opens the OS file picker, copies the chosen image to userData/backgrounds/,
+     * and returns the absolute path of the copied file.
+     * Returns null if the user cancelled.
+     */
+    chooseImage: () => Promise<{ ok: true; path: string } | { ok: false; error: string } | null>;
+    /** Deletes the copied background image file from userData/backgrounds/. */
+    removeImage: (args: { imagePath: string }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  };
 }
 
 // `window.electronAPI` is declared as an ambient global in
