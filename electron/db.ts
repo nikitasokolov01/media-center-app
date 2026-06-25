@@ -139,6 +139,26 @@ export function initDb(): Database.Database {
       PRIMARY KEY (profile_id, type, media_id, playable_id),
       FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
     );
+
+    -- Local, per-profile media ratings (movies/series/anime). Rating is on a
+    -- 1-10 scale (rendered as 5 half-step stars). No stream URLs are stored.
+    CREATE TABLE IF NOT EXISTS media_ratings (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_id  INTEGER NOT NULL,
+      media_type  TEXT    NOT NULL,
+      media_id    TEXT    NOT NULL,
+      title       TEXT    NOT NULL DEFAULT '',
+      year        TEXT,
+      poster      TEXT,
+      rating      REAL    NOT NULL,
+      rated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (profile_id, media_type, media_id),
+      FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_ratings_profile
+      ON media_ratings(profile_id, media_type);
   `);
 
   // Migration: add `completed` to watch_progress if upgrading from an older
@@ -681,6 +701,98 @@ export function listWatchedForMedia(
     Omit<WatchProgress, "completed"> & { completed: number }
   >;
   return rows.map((r) => rowToProgress(r)!);
+}
+
+// ----- Local media ratings (per profile) -------------------------------------
+
+export type RatingMediaType = "movie" | "series" | "anime";
+
+export interface MediaRating {
+  id: number;
+  profileId: number;
+  mediaType: RatingMediaType;
+  mediaId: string;
+  title: string;
+  year: string | null;
+  poster: string | null;
+  /** 1-10 scale (rendered as 5 half-step stars). */
+  rating: number;
+  ratedAt: string;
+  updatedAt: string;
+}
+
+export interface SetRatingInput {
+  profileId: number;
+  mediaType: RatingMediaType;
+  mediaId: string;
+  title?: string;
+  year?: string | null;
+  poster?: string | null;
+  rating: number;
+}
+
+const RATING_SELECT =
+  "SELECT id, profile_id AS profileId, media_type AS mediaType, media_id AS mediaId, " +
+  "title, year, poster, rating, rated_at AS ratedAt, updated_at AS updatedAt FROM media_ratings";
+
+function clampRating(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  // 1-10, half steps.
+  const r = Math.round(n * 2) / 2;
+  return Math.min(10, Math.max(0.5, r));
+}
+
+export function getRating(
+  profileId: number,
+  mediaType: RatingMediaType,
+  mediaId: string,
+): MediaRating | null {
+  const row = require_db()
+    .prepare(`${RATING_SELECT} WHERE profile_id = ? AND media_type = ? AND media_id = ?`)
+    .get(profileId, mediaType, mediaId) as MediaRating | undefined;
+  return row ?? null;
+}
+
+export function setRating(input: SetRatingInput): MediaRating {
+  const d = require_db();
+  const rating = clampRating(input.rating);
+  d.prepare(
+    `INSERT INTO media_ratings (profile_id, media_type, media_id, title, year, poster, rating, rated_at, updated_at)
+     VALUES (@profileId, @mediaType, @mediaId, @title, @year, @poster, @rating, datetime('now'), datetime('now'))
+     ON CONFLICT(profile_id, media_type, media_id) DO UPDATE SET
+       rating = excluded.rating,
+       title = excluded.title,
+       year = excluded.year,
+       poster = excluded.poster,
+       updated_at = datetime('now')`,
+  ).run({
+    profileId: input.profileId,
+    mediaType: input.mediaType,
+    mediaId: input.mediaId,
+    title: input.title ?? "",
+    year: input.year ?? null,
+    poster: input.poster ?? null,
+    rating,
+  });
+  return getRating(input.profileId, input.mediaType, input.mediaId)!;
+}
+
+export function clearRating(
+  profileId: number,
+  mediaType: RatingMediaType,
+  mediaId: string,
+): { ok: true } {
+  require_db()
+    .prepare("DELETE FROM media_ratings WHERE profile_id = ? AND media_type = ? AND media_id = ?")
+    .run(profileId, mediaType, mediaId);
+  return { ok: true };
+}
+
+/** All ratings for a profile, newest-updated first. Used for export. */
+export function listRatings(profileId: number): MediaRating[] {
+  return require_db()
+    .prepare(`${RATING_SELECT} WHERE profile_id = ? ORDER BY updated_at DESC`)
+    .all(profileId) as MediaRating[];
 }
 
 // ----- Series episode cache + "next episode to watch" ----------------------

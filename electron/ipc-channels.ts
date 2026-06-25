@@ -62,6 +62,11 @@ export const IPC = {
   // Custom background image picker
   BgChooseImage: "bg:choose-image",
   BgRemoveImage: "bg:remove-image",
+  // Local per-profile media ratings (Phase 2)
+  RatingGet: "rating:get",
+  RatingSet: "rating:set",
+  RatingClear: "rating:clear",
+  RatingExport: "rating:export",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

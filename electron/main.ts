@@ -24,6 +24,12 @@ import {
   dismissMediaFromContinueWatching,
   setWatched,
   listWatchedForMedia,
+  getRating,
+  setRating,
+  clearRating,
+  listRatings,
+  type SetRatingInput,
+  type RatingMediaType,
   cacheSeriesEpisodes,
   getSeriesLibraryStatus,
   getNextEpisodeAfter,
@@ -285,6 +291,63 @@ function registerIpcHandlers() {
     IPC.WatchedListForMedia,
     async (_e, args: { profileId: number; mediaId: string }) =>
       listWatchedForMedia(args.profileId, args.mediaId),
+  );
+
+  // Local media ratings (per profile) ----------------------------------------
+  ipcMain.handle(
+    IPC.RatingGet,
+    async (_e, args: { profileId: number; mediaType: RatingMediaType; mediaId: string }) =>
+      getRating(args.profileId, args.mediaType, args.mediaId),
+  );
+  ipcMain.handle(IPC.RatingSet, async (_e, args: SetRatingInput) => setRating(args));
+  ipcMain.handle(
+    IPC.RatingClear,
+    async (_e, args: { profileId: number; mediaType: RatingMediaType; mediaId: string }) =>
+      clearRating(args.profileId, args.mediaType, args.mediaId),
+  );
+  // Export ratings to movies.json / series.json / anime.json in a chosen folder.
+  // No stream URLs are ever included (ratings carry none).
+  ipcMain.handle(
+    IPC.RatingExport,
+    async (e, args: { profileId: number; profileName?: string }) => {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      if (!win) return { ok: false as const, error: "No window" };
+      const result = await dialog.showOpenDialog(win, {
+        title: "Choose a folder to export ratings into",
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (result.canceled || !result.filePaths.length) return null;
+      const folder = result.filePaths[0];
+      try {
+        const rows = listRatings(args.profileId);
+        const toExport = (r: typeof rows[number]) => ({
+          title: r.title,
+          year: r.year,
+          type: r.mediaType,
+          mediaId: r.mediaId,
+          rating: r.rating,
+          ratingScale: "1-10",
+          poster: r.poster,
+          profileId: r.profileId,
+          profileName: args.profileName ?? null,
+          ratedAt: r.ratedAt,
+          updatedAt: r.updatedAt,
+        });
+        const movies = rows.filter((r) => r.mediaType === "movie").map(toExport);
+        const series = rows.filter((r) => r.mediaType === "series").map(toExport);
+        const anime = rows.filter((r) => r.mediaType === "anime").map(toExport);
+        await fs.promises.writeFile(path.join(folder, "movies.json"), JSON.stringify(movies, null, 2), "utf-8");
+        await fs.promises.writeFile(path.join(folder, "series.json"), JSON.stringify(series, null, 2), "utf-8");
+        await fs.promises.writeFile(path.join(folder, "anime.json"), JSON.stringify(anime, null, 2), "utf-8");
+        return {
+          ok: true as const,
+          folder,
+          counts: { movies: movies.length, series: series.length, anime: anime.length },
+        };
+      } catch (err) {
+        return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
   );
 
   // Library ------------------------------------------------------------------

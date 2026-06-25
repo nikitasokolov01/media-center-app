@@ -28,6 +28,26 @@ export interface AddonRow {
   installedAt: string;
 }
 
+export interface MediaRating {
+  id: number;
+  profileId: number;
+  mediaType: "movie" | "series" | "anime";
+  mediaId: string;
+  title: string;
+  year: string | null;
+  poster: string | null;
+  /** 1-10 scale (rendered as 5 half-step stars). */
+  rating: number;
+  ratedAt: string;
+  updatedAt: string;
+}
+
+export interface RatingExportResult {
+  ok: true;
+  folder: string;
+  counts: { movies: number; series: number; anime: number };
+}
+
 export interface MediaCenterApi {
   profile: {
     getDefault: () => Promise<Profile>;
@@ -145,6 +165,31 @@ export interface MediaCenterApi {
       profileId: number;
       mediaId: string;
     }) => Promise<WatchProgress[]>;
+  };
+  ratings: {
+    get: (args: {
+      profileId: number;
+      mediaType: "movie" | "series" | "anime";
+      mediaId: string;
+    }) => Promise<MediaRating | null>;
+    set: (args: {
+      profileId: number;
+      mediaType: "movie" | "series" | "anime";
+      mediaId: string;
+      title?: string;
+      year?: string | null;
+      poster?: string | null;
+      rating: number;
+    }) => Promise<MediaRating>;
+    clear: (args: {
+      profileId: number;
+      mediaType: "movie" | "series" | "anime";
+      mediaId: string;
+    }) => Promise<{ ok: true }>;
+    export: (args: {
+      profileId: number;
+      profileName?: string;
+    }) => Promise<RatingExportResult | { ok: false; error: string } | null>;
   };
   library: {
     add: (args: {

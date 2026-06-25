@@ -37,6 +37,7 @@ import SourcesSection from "../components/SourcesSection.js";
 import EpisodeSelector from "../components/EpisodeSelector.js";
 import MediaTrailer from "../components/MediaTrailer.js";
 import BackButton from "../components/BackButton.js";
+import RatingControl from "../components/RatingControl.js";
 import { getTrailerInfo } from "../core/stremio/trailer.js";
 import type {
   SelectedPlayableItem,
@@ -1091,6 +1092,20 @@ export default function MediaPage() {
                 </button>
               )}
             </div>
+
+            {profile && (
+              <div className="media-detail__rating">
+                <span className="media-detail__rating-label">Your rating</span>
+                <RatingControl
+                  profileId={profile.id}
+                  mediaType={isAnime ? "anime" : isSeries ? "series" : "movie"}
+                  mediaId={meta.id}
+                  title={meta.name}
+                  year={year}
+                  poster={meta.poster ?? null}
+                />
+              </div>
+            )}
 
             {description && (
               <p className="media-detail__description">{description}</p>

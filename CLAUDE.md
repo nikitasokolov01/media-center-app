@@ -923,3 +923,47 @@ with `tsc` (renderer + electron) -- both clean.
 - NOTE: a *first-three-rows-specific* asymmetry could not be reproduced from the
   CSS (all home rows resolve to the same inset). If one persists at runtime, a
   screenshot is needed to pin it down.
+## 17. Local Ratings + Watched Controls (Phase 2)
+
+Additive, local-only, per-profile. No playback/source/progress logic changed.
+No remote APIs. No raw stream URLs stored or exported. Prepared for (but not
+implementing) future AniList sync.
+
+### Database
+- New table `media_ratings` (in `electron/db.ts` schema): `id, profile_id,
+  media_type, media_id, title, year, poster, rating, rated_at, updated_at`,
+  `UNIQUE(profile_id, media_type, media_id)`, index on `(profile_id, media_type)`.
+  Created via `CREATE TABLE IF NOT EXISTS` (safe migration).
+- `media_type` is `"movie" | "series" | "anime"`. The renderer passes `"anime"`
+  when the existing anime classifier (`isLikelyAnime`) fires, so export buckets
+  cleanly without a separate Stremio type.
+- Rating scale: **1-10** stored (REAL, half steps), rendered as 5 half-step
+  stars (full star = 2 points, half = 1). AniList-friendly.
+- Functions: `getRating`, `setRating` (upsert), `clearRating`, `listRatings`
+  (per profile, for export). Types: `MediaRating`, `SetRatingInput`,
+  `RatingMediaType`.
+
+### IPC / preload (four-layer)
+- Channels: `rating:get`, `rating:set`, `rating:clear`, `rating:export`.
+- `window.mediaCenter.ratings.{get,set,clear,export}`; types in
+  `src/types/preload.d.ts` (`MediaRating`, `RatingExportResult`).
+- `rating:export` opens an Electron folder dialog (openDirectory) and writes
+  pretty `movies.json` / `series.json` / `anime.json` (arrays; empty `[]` when a
+  bucket has none). Export fields: title, year, type, mediaId, rating,
+  ratingScale ("1-10"), poster, profileId, profileName, ratedAt, updatedAt.
+  Returns `{ ok, folder, counts }` or `{ ok:false, error }` or `null` (cancelled).
+
+### UI
+- New `src/components/RatingControl.tsx` -- 5 half-step stars + value ("X/10" or
+  "Rate this") + Clear. Optimistic set/clear; loads existing rating per
+  profile/media. Placed on `MediaPage` in the body (between actions and
+  description), gated on an active profile.
+- `AboutSettings` -> new "Data" section: "Export ratings (JSON)" button (current
+  profile) with a success/failure message.
+
+### Manual episode watched controls (Part D)
+- Already implemented pre-Phase-2: `EpisodeSelector` per-episode watched toggle
+  -> `onToggleEpisodeWatched` -> `window.mediaCenter.watched.set` -> `setWatched`
+  in `db.ts`. Marking unwatched zeroes only that episode's progress (no wipe of
+  other history) and Continue Watching / resume are unaffected. Verified, not
+  rebuilt this phase.

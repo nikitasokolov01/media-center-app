@@ -28,6 +28,8 @@ export default function AboutSettings() {
   const [copyLabel, setCopyLabel] = useState("Copy debug info");
   const [cacheCleared, setCacheCleared] = useState(false);
   const [folderMsg, setFolderMsg] = useState<string | null>(null);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     window.mediaCenter.app
@@ -43,6 +45,31 @@ export default function AboutSettings() {
     setCacheCleared(true);
     setTimeout(() => setCacheCleared(false), 2500);
   }, []);
+
+  const handleExportRatings = useCallback(async () => {
+    if (!profile) return;
+    setExportMsg(null);
+    setExporting(true);
+    try {
+      const res = await window.mediaCenter.ratings.export({
+        profileId: profile.id,
+        profileName: profile.name,
+      });
+      if (res === null) return; // user cancelled the folder picker
+      if (res.ok) {
+        setExportMsg(
+          `Exported ${res.counts.movies} movies, ${res.counts.series} series, ` +
+          `${res.counts.anime} anime to ${res.folder}`,
+        );
+      } else {
+        setExportMsg(`Export failed: ${res.error}`);
+      }
+    } catch (e) {
+      setExportMsg(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }, [profile]);
 
   const handleOpenFolder = useCallback(async () => {
     if (!info) return;
@@ -215,6 +242,27 @@ export default function AboutSettings() {
           Reset onboarding only re-shows the welcome flow. It does not delete
           profiles, addons, watch progress, or settings.
         </p>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-section__label">Data</h3>
+        <p className="muted small">
+          Export your local ratings for the current profile to a folder as
+          movies.json, series.json, and anime.json. No stream URLs are included.
+        </p>
+        <div className="about-actions">
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={!profile || exporting}
+            onClick={() => void handleExportRatings()}
+          >
+            {exporting ? "Exporting..." : "Export ratings (JSON)"}
+          </button>
+        </div>
+        {exportMsg && (
+          <p className="muted small selectable" style={{ marginTop: 8 }}>{exportMsg}</p>
+        )}
       </section>
 
       <section className="settings-section">

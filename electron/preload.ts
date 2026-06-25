@@ -94,6 +94,23 @@ const api = {
     listForMedia: (args: { profileId: number; mediaId: string }) =>
       ipcRenderer.invoke(IPC.WatchedListForMedia, args),
   },
+  ratings: {
+    get: (args: { profileId: number; mediaType: "movie" | "series" | "anime"; mediaId: string }) =>
+      ipcRenderer.invoke(IPC.RatingGet, args),
+    set: (args: {
+      profileId: number;
+      mediaType: "movie" | "series" | "anime";
+      mediaId: string;
+      title?: string;
+      year?: string | null;
+      poster?: string | null;
+      rating: number;
+    }) => ipcRenderer.invoke(IPC.RatingSet, args),
+    clear: (args: { profileId: number; mediaType: "movie" | "series" | "anime"; mediaId: string }) =>
+      ipcRenderer.invoke(IPC.RatingClear, args),
+    export: (args: { profileId: number; profileName?: string }) =>
+      ipcRenderer.invoke(IPC.RatingExport, args),
+  },
   library: {
     add: (args: {
       profileId: number;
